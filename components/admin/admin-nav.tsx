@@ -71,7 +71,7 @@ export function AdminNav({ role }: { role: AppRole }) {
   const nav = (
     <nav className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2 border-b border-line px-4">
-        <span className="text-lg font-bold tracking-tight text-ink">Bidyut</span>
+        <span className="text-lg font-bold tracking-tight text-ink">Nazmul</span>
         <span className="rounded bg-ink px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">
           Admin
         </span>

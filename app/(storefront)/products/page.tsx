@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "All products",
-  description: "Browse every gadget Bidyut stocks — filter by category, brand and price.",
+  description: "Browse every gadget Nazmul stocks — filter by category, brand and price.",
 };
 
 export default async function ProductsPage({

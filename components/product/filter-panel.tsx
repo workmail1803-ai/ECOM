@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { SlidersHorizontal, X, Check } from "lucide-react";
@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils/cn";
  *
  * Filters are URL state, not component state: a filtered listing is shareable,
  * bookmarkable and server-rendered. The drawer is the same component on mobile.
+ *
+ * useTransition wraps every navigation so the filter panel stays interactive
+ * while the products grid streams in from the server.
  */
 export function FilterPanel({
   categories,
@@ -29,6 +32,7 @@ export function FilterPanel({
   resultCount: number;
 }) {
   const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -38,7 +42,11 @@ export function FilterPanel({
     if (value === null || value === "") next.delete(key);
     else next.set(key, value);
     next.delete("page"); // any filter change resets pagination
-    router.push(`${pathname}?${next.toString()}`);
+    // Wrap in startTransition so React keeps the current UI interactive
+    // while streaming the new server-rendered page in the background.
+    startTransition(() => {
+      router.push(`${pathname}?${next.toString()}`);
+    });
   }
 
   const activeCount = [
@@ -57,6 +65,7 @@ export function FilterPanel({
           <li>
             <FilterLink
               active={!query.category}
+              pending={isPending}
               onClick={() => setParam("category", null)}
             >
               All categories
@@ -68,6 +77,7 @@ export function FilterPanel({
               <li key={c.id}>
                 <FilterLink
                   active={query.category === c.slug}
+                  pending={isPending}
                   onClick={() =>
                     setParam("category", query.category === c.slug ? null : c.slug)
                   }
@@ -83,7 +93,7 @@ export function FilterPanel({
         <FilterGroup title="Brand">
           <ul className="max-h-56 space-y-1 overflow-y-auto pr-1">
             <li>
-              <FilterLink active={!query.brand} onClick={() => setParam("brand", null)}>
+              <FilterLink active={!query.brand} pending={isPending} onClick={() => setParam("brand", null)}>
                 All brands
               </FilterLink>
             </li>
@@ -91,6 +101,7 @@ export function FilterPanel({
               <li key={b.id}>
                 <FilterLink
                   active={query.brand === b.slug}
+                  pending={isPending}
                   onClick={() => setParam("brand", query.brand === b.slug ? null : b.slug)}
                 >
                   {b.name}
@@ -113,7 +124,9 @@ export function FilterPanel({
             min ? next.set("min", min) : next.delete("min");
             max ? next.set("max", max) : next.delete("max");
             next.delete("page");
-            router.push(`${pathname}?${next.toString()}`);
+            startTransition(() => {
+              router.push(`${pathname}?${next.toString()}`);
+            });
           }}
         >
           <Input
@@ -147,12 +160,13 @@ export function FilterPanel({
             <li key={r}>
               <FilterLink
                 active={query.rating === r}
+                pending={isPending}
                 onClick={() =>
                   setParam("rating", query.rating === r ? null : String(r))
                 }
               >
                 <span className="flex items-center gap-1.5">
-                  <Rating value={r} size={12} />
+                  <Rating value={r} size={15} />
                   <span className="text-xs">& up</span>
                 </span>
               </FilterLink>
@@ -164,6 +178,7 @@ export function FilterPanel({
       <FilterGroup title="Availability">
         <FilterLink
           active={query.in_stock === "1"}
+          pending={isPending}
           onClick={() => setParam("in_stock", query.in_stock === "1" ? null : "1")}
         >
           In stock only
@@ -180,6 +195,18 @@ export function FilterPanel({
 
   return (
     <>
+      {/* Loading overlay on the product grid — visible instantly on filter click */}
+      {isPending ? (
+        <div className="fixed inset-x-0 top-0 z-[100] h-[2.5px]">
+          <div
+            className="h-full bg-brand-600"
+            style={{
+              animation: "nav-progress 1.8s cubic-bezier(0.4, 0, 0, 1) forwards",
+            }}
+          />
+        </div>
+      ) : null}
+
       {/* Mobile trigger */}
       <div className="lg:hidden">
         <Button variant="outline" onClick={() => setOpen(true)} block>
@@ -244,10 +271,12 @@ function FilterGroup({ title, children }: { title: string; children: React.React
 
 function FilterLink({
   active,
+  pending,
   onClick,
   children,
 }: {
   active: boolean;
+  pending?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -260,6 +289,7 @@ function FilterLink({
         active
           ? "bg-brand-50 font-medium text-brand-700"
           : "text-ink-soft hover:bg-surface-sunken",
+        pending && "pointer-events-none opacity-70",
       )}
     >
       <span>{children}</span>

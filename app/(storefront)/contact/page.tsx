@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = {
   title: "Contact us",
   description:
-    "Call, WhatsApp, Messenger or email Bidyut — and where to find our counter in Dhaka.",
+    "Call, WhatsApp, Messenger or email Nazmul — and where to find our counter in Dhaka.",
 };
 
 export default async function ContactPage() {

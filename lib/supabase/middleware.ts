@@ -33,11 +33,14 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // getUser() revalidates the JWT against the auth server. getSession() would
-  // trust whatever is in the cookie, which is exactly what we cannot do here.
+  // getSession() trusts the JWT without calling the auth server — fast, no
+  // network round-trip. This is fine because middleware redirects are UX, not
+  // authorization. The real security boundary is RLS and the getUser() call
+  // inside requireStaff() / requireUser().
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const { pathname } = request.nextUrl;
 

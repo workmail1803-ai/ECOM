@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Phone, User, Heart, Package } from "lucide-react";
 import { getCategories } from "@/lib/queries/catalog";
@@ -46,15 +47,22 @@ export async function Header() {
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">
         <MobileNav categories={topLevel} />
 
-        <Link href="/" className="flex shrink-0 items-baseline gap-1.5">
-          <span className="text-xl font-bold tracking-tight text-ink">
-            {settings.store_name}
+        <Link href="/" className="flex shrink-0 flex-col">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xl font-bold tracking-tight text-ink">
+              {settings.store_name}
+            </span>
+            <span className="hidden h-1.5 w-1.5 rounded-full bg-brand-600 sm:block" />
+          </div>
+          <span className="text-[9px] leading-tight tracking-wide text-ink-faint">
+            Developed by Nafis Hossain Momen
           </span>
-          <span className="hidden h-1.5 w-1.5 rounded-full bg-brand-600 sm:block" />
         </Link>
 
         <div className="ml-2 hidden flex-1 md:block">
-          <SearchBox />
+          <Suspense>
+            <SearchBox />
+          </Suspense>
         </div>
 
         <div className="ml-auto flex items-center gap-1">

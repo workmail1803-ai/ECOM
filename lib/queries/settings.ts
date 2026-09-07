@@ -29,13 +29,13 @@ export interface StoreSettings {
 
 /** Used when the settings row is missing so the UI still renders sensibly. */
 const FALLBACK: StoreSettings = {
-  store_name: "Bidyut",
+  store_name: "Nazmul",
   store_tagline: "Electronics, honestly priced.",
   store_description:
-    "Bidyut is a Dhaka-based electronics retailer delivering nationwide.",
+    "Nazmul is a Dhaka-based electronics retailer delivering nationwide.",
   support_phone: "+8801812345678",
   support_whatsapp: "+8801812345678",
-  support_email: "support@bidyut.com.bd",
+  support_email: "support@nazmul.com.bd",
   support_hours: "Saturday–Thursday, 10:00–20:00",
   showroom_address: "Panthapath, Dhaka",
   social_links: {},

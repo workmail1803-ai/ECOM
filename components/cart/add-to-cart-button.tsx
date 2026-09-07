@@ -1,10 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ShoppingCart, Check } from "lucide-react";
-import { useState } from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { addToCart } from "@/lib/actions/cart";
 
@@ -13,6 +12,10 @@ import { addToCart } from "@/lib/actions/cart";
  *
  * Note there is no price anywhere in this component. It sends ids; the server
  * decides what anything costs.
+ *
+ * Performance: the server action runs first, then router.refresh() happens in
+ * the background via startTransition so the button doesn't stay "loading"
+ * until the whole page re-renders. The user sees "Added" instantly.
  */
 export function AddToCartButton({
   productId,
@@ -33,12 +36,13 @@ export function AddToCartButton({
   variant?: ButtonProps["variant"];
   block?: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
   const router = useRouter();
 
-  function onClick() {
-    startTransition(async () => {
+  async function onClick() {
+    setLoading(true);
+    try {
       const result = await addToCart({ productId, variantId, quantity });
 
       if (!result.ok) {
@@ -51,23 +55,26 @@ export function AddToCartButton({
 
       setAdded(true);
       setTimeout(() => setAdded(false), 1600);
+    } finally {
+      setLoading(false);
+    }
 
-      // Refresh so the header cart count reflects the new quote.
-      router.refresh();
-    });
+    // Refresh the page in the background so the header cart count updates
+    // without blocking the button. User sees "Added" instantly.
+    router.refresh();
   }
 
   return (
     <Button
       onClick={onClick}
       disabled={disabled}
-      loading={pending}
+      loading={loading}
       size={size}
       variant={disabled ? "outline" : variant}
       block={block}
       aria-label={disabled ? "Out of stock" : label}
     >
-      {!pending ? added ? <Check /> : <ShoppingCart /> : null}
+      {!loading ? added ? <Check /> : <ShoppingCart /> : null}
       {disabled ? "Out of stock" : added ? "Added" : label}
     </Button>
   );

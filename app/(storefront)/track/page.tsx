@@ -4,7 +4,7 @@ import { TrackForm } from "@/components/checkout/track-form";
 export const metadata: Metadata = {
   title: "Track your order",
   description:
-    "Enter your order number and mobile number to see exactly where your Bidyut order is.",
+    "Enter your order number and mobile number to see exactly where your Nazmul order is.",
 };
 
 export default async function TrackPage({

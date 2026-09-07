@@ -30,11 +30,11 @@ export interface ContentPage {
 export const CONTENT_PAGES: ContentPage[] = [
   {
     slug: "about",
-    title: "About Bidyut",
+    title: "About Nazmul",
     description:
       "Who we are, what we stock, and why we will not sell you a refurbished unit as new.",
     intro:
-      "Bidyut is a Dhaka-based retailer of consumer electronics and gadgets. We started because buying a power bank in this country involves too much guesswork — capacities that are not real, warranties nobody honours, and prices that change depending on how you ask.",
+      "Nazmul is a Dhaka-based retailer of consumer electronics and gadgets. We started because buying a power bank in this country involves too much guesswork — capacities that are not real, warranties nobody honours, and prices that change depending on how you ask.",
     sections: [
       {
         heading: "What we actually do",

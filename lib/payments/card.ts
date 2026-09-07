@@ -44,7 +44,7 @@ export const cardProvider: PaymentProvider = {
         fail_url: `${input.callbackUrl}&result=fail`,
         cancel_url: `${input.callbackUrl}&result=cancel`,
         cus_name: input.customerName,
-        cus_email: input.customerEmail ?? "noreply@bidyut.com.bd",
+        cus_email: input.customerEmail ?? "noreply@nazmul.com.bd",
         cus_phone: input.customerPhone,
         cus_add1: "N/A",
         cus_city: "Dhaka",

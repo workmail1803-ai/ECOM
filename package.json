@@ -1,8 +1,8 @@
 {
-  "name": "bidyut-commerce",
+  "name": "nazmul-commerce",
   "version": "1.0.0",
   "private": true,
-  "description": "Bidyut — Bangladesh electronics & gadgets commerce platform",
+  "description": "Nazmul — Bangladesh electronics & gadgets commerce platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

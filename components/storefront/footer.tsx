@@ -179,11 +179,19 @@ export async function Footer() {
       </div>
 
       <div className="border-t border-line">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-ink-muted sm:flex-row">
-          <p>
-            © {new Date().getFullYear()} {settings.store_name}. All rights reserved.
-          </p>
-          <p>Cash on delivery nationwide · Official warranty</p>
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-ink-muted sm:flex-row">
+          <div className="flex flex-col items-center gap-1 sm:items-start">
+            <p>
+              © {new Date().getFullYear()} {settings.store_name}. All rights reserved.
+            </p>
+            <p className="text-ink-faint">Developed by Nafis Hossain Momen</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-2.5 py-1 text-[11px] font-semibold text-warning">
+              🚧 Under Development
+            </span>
+            <p>Cash on delivery nationwide · Official warranty</p>
+          </div>
         </div>
       </div>
     </footer>

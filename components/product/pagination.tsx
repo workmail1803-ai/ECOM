@@ -1,11 +1,13 @@
 "use client";
 
+import { useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 /** Numbered pagination that keeps every other filter in the query string. */
 export function Pagination({ page, pageCount }: { page: number; pageCount: number }) {
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -15,7 +17,9 @@ export function Pagination({ page, pageCount }: { page: number; pageCount: numbe
   function go(p: number) {
     const next = new URLSearchParams(params.toString());
     p <= 1 ? next.delete("page") : next.set("page", String(p));
-    router.push(`${pathname}?${next.toString()}`);
+    startTransition(() => {
+      router.push(`${pathname}?${next.toString()}`);
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -27,7 +31,7 @@ export function Pagination({ page, pageCount }: { page: number; pageCount: numbe
   }
 
   return (
-    <nav className="mt-8 flex items-center justify-center gap-1" aria-label="Pagination">
+    <nav className={cn("mt-8 flex items-center justify-center gap-1", isPending && "pointer-events-none opacity-60")} aria-label="Pagination">
       <button
         onClick={() => go(page - 1)}
         disabled={page <= 1}

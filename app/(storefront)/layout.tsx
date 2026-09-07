@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { Header } from "@/components/storefront/header";
 import { Footer } from "@/components/storefront/footer";
 import { SupportWidget } from "@/components/storefront/support-widget";
+import { NavProgress } from "@/components/ui/nav-progress";
 
 export default function StorefrontLayout({
   children,
@@ -9,6 +11,11 @@ export default function StorefrontLayout({
 }) {
   return (
     <div className="flex min-h-dvh flex-col">
+      {/* Navigation progress bar — fires instantly on every internal link click */}
+      <Suspense>
+        <NavProgress />
+      </Suspense>
+
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />

@@ -131,7 +131,7 @@ export default async function HomePage() {
       {home.bestSellers.length > 0 ? (
         <Section
           title="Best sellers"
-          subtitle="What Bidyut customers buy most."
+          subtitle="What Nazmul customers buy most."
           href="/products?sort=popular"
         >
           <ProductRail products={home.bestSellers} />
@@ -169,7 +169,7 @@ export default async function HomePage() {
         </Section>
       ) : null}
 
-      <Section title="Buying from Bidyut">
+      <Section title="Buying from Nazmul">
         <WhyChooseUs />
       </Section>
 

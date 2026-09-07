@@ -118,16 +118,9 @@ export async function getExistingCartId(): Promise<{
   const guestToken = await readGuestToken();
   if (!guestToken) return { cartId: null, guestToken: null };
 
-  const { data } = await supabase
-    .from("carts")
-    .select("id")
-    .eq("guest_token", guestToken)
-    .maybeSingle();
-
-  // RLS hides guest carts from the anon role by design, so this select returns
-  // nothing. Fall back to the SECURITY DEFINER RPC, which checks the token.
-  if (data?.id) return { cartId: data.id, guestToken };
-
+  // RLS hides guest carts from the anon role by design, so the SELECT on the
+  // carts table always returns nothing for guests. Skip it and go straight to
+  // the SECURITY DEFINER RPC which does the token-based ownership check.
   const { data: rpcId } = await supabase.rpc("get_or_create_cart", {
     p_guest_token: guestToken,
   });

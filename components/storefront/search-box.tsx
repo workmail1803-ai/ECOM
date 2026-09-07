@@ -1,15 +1,20 @@
 "use client";
 
+import { useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 
 /**
  * Header search. Submits to /products?q=… rather than querying as you type —
  * a suggestion request per keystroke is the fastest way to exhaust the free
  * tier's connection pool.
+ *
+ * Wrapped in startTransition so the UI stays responsive while the server
+ * queries the database.
  */
 export function SearchBox() {
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const params = useSearchParams();
   const [value, setValue] = useState(params.get("q") ?? "");
@@ -17,16 +22,26 @@ export function SearchBox() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     const q = value.trim();
-    router.push(q ? `/products?q=${encodeURIComponent(q)}` : "/products");
+    startTransition(() => {
+      router.push(q ? `/products?q=${encodeURIComponent(q)}` : "/products");
+    });
   }
 
   return (
     <form onSubmit={onSubmit} role="search" className="relative w-full">
-      <Search
-        size={17}
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
-        aria-hidden
-      />
+      {isPending ? (
+        <Loader2
+          size={17}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 animate-spin text-brand-600"
+          aria-hidden
+        />
+      ) : (
+        <Search
+          size={17}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
+          aria-hidden
+        />
+      )}
       <input
         type="search"
         name="q"

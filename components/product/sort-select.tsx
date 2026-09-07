@@ -1,5 +1,6 @@
 "use client";
 
+import { useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select } from "@/components/ui/field";
 import type { ProductSort } from "@/lib/validations/catalog";
@@ -13,6 +14,7 @@ const OPTIONS: { value: ProductSort; label: string }[] = [
 ];
 
 export function SortSelect({ value }: { value: ProductSort }) {
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -26,10 +28,13 @@ export function SortSelect({ value }: { value: ProductSort }) {
           const next = new URLSearchParams(params.toString());
           next.set("sort", e.target.value);
           next.delete("page");
-          router.push(`${pathname}?${next.toString()}`);
+          startTransition(() => {
+            router.push(`${pathname}?${next.toString()}`);
+          });
         }}
         className="h-9 w-44 text-sm"
         aria-label="Sort products"
+        disabled={isPending}
       >
         {OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>
