@@ -1,0 +1,98 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { SearchX } from "lucide-react";
+import { listProducts, getCategories, getBrands } from "@/lib/queries/catalog";
+import { parseProductQuery } from "@/lib/validations/catalog";
+import { ProductGrid } from "@/components/storefront/sections";
+import { FilterPanel } from "@/components/product/filter-panel";
+import { SortSelect } from "@/components/product/sort-select";
+import { Pagination } from "@/components/product/pagination";
+import { EmptyState } from "@/components/ui/primitives";
+import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  title: "All products",
+  description: "Browse every gadget Bidyut stocks — filter by category, brand and price.",
+};
+
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const query = parseProductQuery(params);
+
+  const [{ products, total, page, pageCount }, categories, brands] =
+    await Promise.all([listProducts(query), getCategories(), getBrands()]);
+
+  const activeCategory = categories.find((c) => c.slug === query.category);
+
+  const heading = query.q
+    ? `Results for “${query.q}”`
+    : (activeCategory?.name ?? "All products");
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      <nav aria-label="Breadcrumb" className="mb-4 text-xs text-ink-muted">
+        <Link href="/" className="hover:text-brand-700">
+          Home
+        </Link>
+        <span className="mx-1.5">/</span>
+        <Link href="/products" className="hover:text-brand-700">
+          Products
+        </Link>
+        {activeCategory ? (
+          <>
+            <span className="mx-1.5">/</span>
+            <span className="text-ink">{activeCategory.name}</span>
+          </>
+        ) : null}
+      </nav>
+
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{heading}</h1>
+          <p className="mt-1 text-sm text-ink-muted tabular">
+            {total} {total === 1 ? "product" : "products"}
+            {activeCategory?.description ? ` · ${activeCategory.description}` : ""}
+          </p>
+        </div>
+        <SortSelect value={query.sort} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
+        <FilterPanel
+          categories={categories}
+          brands={brands}
+          query={query}
+          resultCount={total}
+        />
+
+        <div>
+          {products.length === 0 ? (
+            <EmptyState
+              icon={<SearchX size={32} />}
+              title="Nothing matched those filters"
+              description={
+                query.q
+                  ? `We could not find anything for “${query.q}”. Try a shorter search, or clear your filters.`
+                  : "Try widening your price range or clearing a filter."
+              }
+              action={
+                <Button asChild variant="outline">
+                  <Link href="/products">Clear all filters</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <ProductGrid products={products} priorityCount={5} />
+              <Pagination page={page} pageCount={pageCount} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

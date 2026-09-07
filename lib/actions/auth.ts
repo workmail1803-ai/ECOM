@@ -1,0 +1,157 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { readGuestToken, clearGuestToken } from "@/lib/cart/session";
+import { bdPhone } from "@/lib/validations/checkout";
+
+export interface AuthState {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  fieldErrors?: Record<string, string>;
+}
+
+const signInSchema = z.object({
+  email: z.string().trim().email("Enter a valid email address"),
+  password: z.string().min(1, "Enter your password"),
+  next: z.string().optional(),
+});
+
+const signUpSchema = z.object({
+  full_name: z.string().trim().min(2, "Enter your name").max(120),
+  email: z.string().trim().email("Enter a valid email address"),
+  phone: bdPhone.optional().or(z.literal("")),
+  password: z
+    .string()
+    .min(8, "Use at least 8 characters")
+    .max(72, "Passwords are limited to 72 characters"),
+});
+
+function fieldErrorsOf(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = String(issue.path[0] ?? "form");
+    out[key] ??= issue.message;
+  }
+  return out;
+}
+
+/**
+ * Sign in, then fold the guest cart into the user's cart.
+ *
+ * The merge happens here rather than in a trigger because the guest token lives
+ * in a cookie the database cannot see.
+ */
+export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = signInSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { ok: false, error: "Please check your details.", fieldErrors: fieldErrorsOf(parsed.error) };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: parsed.data.email,
+    password: parsed.data.password,
+  });
+
+  if (error) {
+    // Deliberately vague: distinguishing "no such account" from "wrong
+    // password" is an account-enumeration oracle.
+    return { ok: false, error: "That email and password do not match." };
+  }
+
+  const guestToken = await readGuestToken();
+  if (guestToken) {
+    await supabase.rpc("merge_guest_cart", { p_guest_token: guestToken });
+    await clearGuestToken();
+  }
+
+  revalidatePath("/", "layout");
+  redirect(parsed.data.next || "/account");
+}
+
+export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = signUpSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { ok: false, error: "Please check your details.", fieldErrors: fieldErrorsOf(parsed.error) };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      // Read by the on_auth_user_created trigger to populate profiles.
+      data: { full_name: parsed.data.full_name, phone: parsed.data.phone || null },
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/auth/callback`,
+    },
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  // No session means the project requires email confirmation.
+  if (!data.session) {
+    return {
+      ok: true,
+      message: "Check your inbox — we sent you a link to confirm your address.",
+    };
+  }
+
+  const guestToken = await readGuestToken();
+  if (guestToken) {
+    await supabase.rpc("merge_guest_cart", { p_guest_token: guestToken });
+    await clearGuestToken();
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/account");
+}
+
+export async function signOut() {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  revalidatePath("/", "layout");
+  redirect("/");
+}
+
+export async function requestPasswordReset(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!z.string().email().safeParse(email).success) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+
+  const supabase = await createClient();
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/reset-password`,
+  });
+
+  // Always the same answer, whether or not the account exists.
+  return {
+    ok: true,
+    message: "If that email has an account, a reset link is on its way.",
+  };
+}
+
+export async function updatePassword(
+  _prev: AuthState,
+  formData: FormData,
+): Promise<AuthState> {
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) {
+    return { ok: false, error: "Use at least 8 characters." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+
+  redirect("/account");
+}

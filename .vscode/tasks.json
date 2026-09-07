@@ -1,0 +1,61 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Test Experiential gpt-6-astra",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"$envFile = Get-Content -LiteralPath '.env.local' | Where-Object { $_ -match '^([^#][^=]*)=(.*)$' }; foreach ($line in $envFile) { $match = [regex]::Match($line, '^([^#][^=]*)=(.*)$'); [Environment]::SetEnvironmentVariable($match.Groups[1].Value.Trim(), $match.Groups[2].Value.Trim()) }; if ([string]::IsNullOrWhiteSpace($env:EXPLABS_API_KEY)) { throw 'EXPLABS_API_KEY is not set in .env.local' }; $body = @{ model = 'gpt-6-astra'; messages = @(@{ role = 'user'; content = 'Reply with exactly: Experiential gateway test passed.' }); stream = $false } | ConvertTo-Json -Depth 5; $response = Invoke-RestMethod -Method Post -Uri 'https://api.experientiallabs.ai/v1/chat/completions' -Headers @{ Authorization = \"Bearer $env:EXPLABS_API_KEY\"; 'Content-Type' = 'application/json' } -Body $body; [ordered]@{ reply = $response.choices[0].message.content; usage = $response.usage } | ConvertTo-Json -Depth 5"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Test Experiential gpt-6-astra (script)",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"test-experiential.ps1"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Diagnose Experiential gpt-6-astra",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"test-experiential.ps1"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Diagnose Experiential gpt-6-astra (retry)",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"test-experiential.ps1"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

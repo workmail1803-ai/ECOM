@@ -1,0 +1,611 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireStaff, requireAdmin } from "@/lib/auth/session";
+import { takaToPaisa } from "@/lib/utils/money";
+import type { OrderStatus } from "@/types/database";
+
+/**
+ * Admin mutations.
+ *
+ * Two rules hold throughout:
+ *   1. Every action calls requireStaff() (or requireAdmin()) before touching
+ *      anything. The service-role client ignores RLS, so this IS the check.
+ *   2. Order status changes go through update_order_status(), never a direct
+ *      UPDATE — the SQL function owns the legal-transition table and the stock
+ *      restoration, and doing it here would duplicate both.
+ */
+
+export interface AdminState {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  fieldErrors?: Record<string, string>;
+}
+
+function zodErrors(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const i of error.issues) out[String(i.path[0] ?? "form")] ??= i.message;
+  return out;
+}
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+// ── Orders ──────────────────────────────────────────────────────────────────
+
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  note?: string,
+): Promise<AdminState> {
+  await requireStaff();
+  // The user-scoped client on purpose: update_order_status() re-checks
+  // is_staff() internally, so the caller's identity must reach Postgres.
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("update_order_status", {
+    p_order_id: orderId,
+    p_status: status,
+    p_note: note ?? null,
+  });
+
+  if (error) {
+    if (error.message.includes("illegal_transition")) {
+      return { ok: false, error: "That status change is not allowed from here." };
+    }
+    if (error.message.includes("forbidden")) {
+      return { ok: false, error: "You do not have permission to do that." };
+    }
+    return { ok: false, error: "Could not update the order." };
+  }
+
+  revalidatePath("/admin/orders");
+  revalidatePath(`/admin/orders/${orderId}`);
+  return { ok: true, message: `Order marked ${status.replace(/_/g, " ")}.` };
+}
+
+export async function saveInternalNote(
+  orderId: string,
+  note: string,
+): Promise<AdminState> {
+  await requireStaff();
+  const db = createAdminClient();
+
+  const { error } = await db
+    .from("orders")
+    .update({ internal_note: note || null })
+    .eq("id", orderId);
+
+  if (error) return { ok: false, error: "Could not save the note." };
+
+  revalidatePath(`/admin/orders/${orderId}`);
+  return { ok: true, message: "Note saved." };
+}
+
+// ── Products ────────────────────────────────────────────────────────────────
+
+const productSchema = z.object({
+  name: z.string().trim().min(2, "Give the product a name").max(200),
+  slug: z.string().trim().max(80).optional().or(z.literal("")),
+  sku: z.string().trim().min(1, "SKU is required").max(60),
+  category_id: z.string().uuid().optional().or(z.literal("")),
+  brand_id: z.string().uuid().optional().or(z.literal("")),
+  price: z.coerce.number().positive("Price must be above zero"),
+  compare_at: z.coerce.number().optional(),
+  cost: z.coerce.number().optional(),
+  stock: z.coerce.number().int().min(0),
+  low_stock_threshold: z.coerce.number().int().min(0).default(5),
+  short_description: z.string().trim().max(400).optional().or(z.literal("")),
+  description: z.string().trim().max(20000).optional().or(z.literal("")),
+  warranty: z.string().trim().max(200).optional().or(z.literal("")),
+  delivery_note: z.string().trim().max(300).optional().or(z.literal("")),
+  thumbnail_url: z.string().trim().url().optional().or(z.literal("")),
+  video_url: z.string().trim().url().optional().or(z.literal("")),
+  status: z.enum(["draft", "active", "archived"]),
+  is_featured: z.coerce.boolean().optional().default(false),
+  is_new_arrival: z.coerce.boolean().optional().default(false),
+  is_best_seller: z.coerce.boolean().optional().default(false),
+  /** Newline-separated in the form, text[] in the database. */
+  features: z.string().optional().or(z.literal("")),
+  /** One "Label: value" per line. */
+  specifications: z.string().optional().or(z.literal("")),
+});
+
+export async function saveProduct(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requireStaff();
+
+  const raw = Object.fromEntries(formData);
+  const parsed = productSchema.safeParse({
+    ...raw,
+    is_featured: formData.get("is_featured") === "on",
+    is_new_arrival: formData.get("is_new_arrival") === "on",
+    is_best_seller: formData.get("is_best_seller") === "on",
+  });
+
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "Please check the highlighted fields.",
+      fieldErrors: zodErrors(parsed.error),
+    };
+  }
+
+  const d = parsed.data;
+  const id = String(formData.get("id") ?? "");
+
+  const compareAt = d.compare_at ? takaToPaisa(d.compare_at) : null;
+  const price = takaToPaisa(d.price);
+
+  // Mirrors the products_compare_at_sane CHECK, so the operator gets a sentence
+  // instead of a constraint violation.
+  if (compareAt !== null && compareAt <= price) {
+    return {
+      ok: false,
+      error: "The compare-at price must be higher than the selling price.",
+      fieldErrors: { compare_at: "Must be above the selling price" },
+    };
+  }
+
+  const row = {
+    name: d.name,
+    slug: d.slug || slugify(d.name),
+    sku: d.sku,
+    category_id: d.category_id || null,
+    brand_id: d.brand_id || null,
+    price_paisa: price,
+    compare_at_paisa: compareAt,
+    cost_paisa: d.cost ? takaToPaisa(d.cost) : null,
+    stock: d.stock,
+    low_stock_threshold: d.low_stock_threshold,
+    short_description: d.short_description || null,
+    description: d.description || null,
+    warranty: d.warranty || null,
+    delivery_note: d.delivery_note || null,
+    thumbnail_url: d.thumbnail_url || null,
+    video_url: d.video_url || null,
+    status: d.status,
+    is_featured: d.is_featured,
+    is_new_arrival: d.is_new_arrival,
+    is_best_seller: d.is_best_seller,
+    features: (d.features ?? "")
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    specifications: (d.specifications ?? "")
+      .split("\n")
+      .map((line) => {
+        const idx = line.indexOf(":");
+        if (idx === -1) return null;
+        return {
+          label: line.slice(0, idx).trim(),
+          value: line.slice(idx + 1).trim(),
+        };
+      })
+      .filter((s): s is { label: string; value: string } => Boolean(s?.label && s.value)),
+  };
+
+  const db = createAdminClient();
+  const { error } = id
+    ? await db.from("products").update(row).eq("id", id)
+    : await db.from("products").insert(row);
+
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false, error: "That slug or SKU is already in use." };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
+  revalidatePath("/");
+  return { ok: true, message: id ? "Product updated." : "Product created." };
+}
+
+export async function setProductStatus(
+  id: string,
+  status: "draft" | "active" | "archived",
+): Promise<AdminState> {
+  await requireStaff();
+  const db = createAdminClient();
+
+  const { error } = await db.from("products").update({ status }).eq("id", id);
+  if (error) return { ok: false, error: "Could not change the status." };
+
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
+  return { ok: true, message: `Product ${status}.` };
+}
+
+/** Archive rather than delete — order_items reference products by id. */
+export async function archiveProduct(id: string): Promise<AdminState> {
+  return setProductStatus(id, "archived");
+}
+
+export async function adjustStock(id: string, stock: number): Promise<AdminState> {
+  await requireStaff();
+  if (!Number.isInteger(stock) || stock < 0) {
+    return { ok: false, error: "Stock must be a whole number, zero or more." };
+  }
+
+  const db = createAdminClient();
+  const { error } = await db.from("products").update({ stock }).eq("id", id);
+  if (error) return { ok: false, error: "Could not update stock." };
+
+  revalidatePath("/admin/stock");
+  revalidatePath("/admin/products");
+  return { ok: true, message: "Stock updated." };
+}
+
+// ── Categories ──────────────────────────────────────────────────────────────
+
+const categorySchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  slug: z.string().trim().max(80).optional().or(z.literal("")),
+  description: z.string().trim().max(400).optional().or(z.literal("")),
+  icon: z.string().trim().max(40).optional().or(z.literal("")),
+  image_url: z.string().trim().url().optional().or(z.literal("")),
+  position: z.coerce.number().int().min(0).default(0),
+});
+
+export async function saveCategory(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requireStaff();
+  const parsed = categorySchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return { ok: false, error: "Check the fields.", fieldErrors: zodErrors(parsed.error) };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const row = {
+    name: parsed.data.name,
+    slug: parsed.data.slug || slugify(parsed.data.name),
+    description: parsed.data.description || null,
+    icon: parsed.data.icon || null,
+    image_url: parsed.data.image_url || null,
+    position: parsed.data.position,
+    is_active: formData.get("is_active") === "on",
+    is_featured: formData.get("is_featured") === "on",
+  };
+
+  const db = createAdminClient();
+  const { error } = id
+    ? await db.from("categories").update(row).eq("id", id)
+    : await db.from("categories").insert(row);
+
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "That slug is taken." };
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/categories");
+  revalidatePath("/", "layout");
+  return { ok: true, message: id ? "Category updated." : "Category created." };
+}
+
+export async function deleteCategory(id: string): Promise<AdminState> {
+  await requireStaff();
+  const db = createAdminClient();
+
+  // products.category_id is ON DELETE SET NULL, so the products survive — but
+  // an operator deleting a category rarely means "orphan 40 products".
+  const { count } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("category_id", id);
+
+  if ((count ?? 0) > 0) {
+    return {
+      ok: false,
+      error: `${count} products still use this category. Move them first, or deactivate the category instead.`,
+    };
+  }
+
+  const { error } = await db.from("categories").delete().eq("id", id);
+  if (error) return { ok: false, error: "Could not delete that category." };
+
+  revalidatePath("/admin/categories");
+  return { ok: true, message: "Category deleted." };
+}
+
+// ── Coupons ─────────────────────────────────────────────────────────────────
+
+const couponSchema = z.object({
+  code: z.string().trim().min(3).max(24).transform((s) => s.toUpperCase()),
+  description: z.string().trim().max(200).optional().or(z.literal("")),
+  discount_type: z.enum(["percentage", "fixed"]),
+  discount_value: z.coerce.number().positive(),
+  min_order: z.coerce.number().min(0).default(0),
+  max_discount: z.coerce.number().optional(),
+  starts_at: z.string().optional().or(z.literal("")),
+  expires_at: z.string().optional().or(z.literal("")),
+  usage_limit: z.coerce.number().int().positive().optional(),
+  per_user_limit: z.coerce.number().int().positive().default(1),
+});
+
+export async function saveCoupon(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requireStaff();
+  const parsed = couponSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return { ok: false, error: "Check the fields.", fieldErrors: zodErrors(parsed.error) };
+  }
+
+  const d = parsed.data;
+
+  if (d.discount_type === "percentage" && d.discount_value > 100) {
+    return {
+      ok: false,
+      error: "A percentage discount cannot exceed 100.",
+      fieldErrors: { discount_value: "Maximum 100" },
+    };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const row = {
+    code: d.code,
+    description: d.description || null,
+    discount_type: d.discount_type,
+    // Percentage is stored as whole percent; fixed is stored as paisa.
+    discount_value:
+      d.discount_type === "percentage"
+        ? Math.round(d.discount_value)
+        : takaToPaisa(d.discount_value),
+    min_order_paisa: takaToPaisa(d.min_order),
+    max_discount_paisa: d.max_discount ? takaToPaisa(d.max_discount) : null,
+    starts_at: d.starts_at || null,
+    expires_at: d.expires_at || null,
+    usage_limit: d.usage_limit ?? null,
+    per_user_limit: d.per_user_limit,
+    is_active: formData.get("is_active") === "on",
+  };
+
+  const db = createAdminClient();
+  const { error } = id
+    ? await db.from("coupons").update(row).eq("id", id)
+    : await db.from("coupons").insert(row);
+
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "That code already exists." };
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/coupons");
+  return { ok: true, message: id ? "Coupon updated." : "Coupon created." };
+}
+
+export async function toggleCoupon(id: string, active: boolean): Promise<AdminState> {
+  await requireStaff();
+  const db = createAdminClient();
+  const { error } = await db.from("coupons").update({ is_active: active }).eq("id", id);
+  if (error) return { ok: false, error: "Could not update the coupon." };
+  revalidatePath("/admin/coupons");
+  return { ok: true };
+}
+
+// ── Banners ─────────────────────────────────────────────────────────────────
+
+export async function saveBanner(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requireStaff();
+
+  const get = (k: string) => String(formData.get(k) ?? "").trim() || null;
+  const title = get("title");
+  if (!title) return { ok: false, error: "A banner needs a title." };
+
+  const accent = get("accent_hex");
+  if (accent && !/^#[0-9a-fA-F]{6}$/.test(accent)) {
+    return { ok: false, error: "Accent must be a hex colour like #1B4DFF." };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const row = {
+    placement: get("placement") ?? "hero",
+    title,
+    subtitle: get("subtitle"),
+    eyebrow: get("eyebrow"),
+    image_url: get("image_url"),
+    mobile_image_url: get("mobile_image_url"),
+    cta_label: get("cta_label"),
+    cta_href: get("cta_href"),
+    secondary_cta_label: get("secondary_cta_label"),
+    secondary_cta_href: get("secondary_cta_href"),
+    accent_hex: accent,
+    priority: Number(formData.get("priority") ?? 0) || 0,
+    is_active: formData.get("is_active") === "on",
+  };
+
+  const db = createAdminClient();
+  const { error } = id
+    ? await db.from("banners").update(row).eq("id", id)
+    : await db.from("banners").insert(row);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/banners");
+  revalidatePath("/");
+  return { ok: true, message: id ? "Banner updated." : "Banner created." };
+}
+
+export async function deleteBanner(id: string): Promise<AdminState> {
+  await requireStaff();
+  const db = createAdminClient();
+  const { error } = await db.from("banners").delete().eq("id", id);
+  if (error) return { ok: false, error: "Could not delete that banner." };
+  revalidatePath("/admin/banners");
+  revalidatePath("/");
+  return { ok: true, message: "Banner deleted." };
+}
+
+// ── Reviews ─────────────────────────────────────────────────────────────────
+
+export async function moderateReview(
+  id: string,
+  status: "approved" | "rejected",
+): Promise<AdminState> {
+  const staff = await requireStaff();
+  const db = createAdminClient();
+
+  // The rollup trigger on reviews keeps products.rating_* in step with this.
+  const { error } = await db
+    .from("reviews")
+    .update({
+      status,
+      moderated_by: staff.id,
+      moderated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) return { ok: false, error: "Could not moderate that review." };
+
+  revalidatePath("/admin/reviews");
+  return { ok: true, message: `Review ${status}.` };
+}
+
+// ── Customers / roles ───────────────────────────────────────────────────────
+
+export async function setUserRole(
+  userId: string,
+  role: "customer" | "manager" | "admin",
+): Promise<AdminState> {
+  // Role management is admin-only — a manager cannot promote themselves.
+  const actor = await requireAdmin();
+
+  if (userId === actor.id) {
+    return { ok: false, error: "You cannot change your own role." };
+  }
+
+  const db = createAdminClient();
+
+  // Roles are additive rows; replace the set rather than accumulating.
+  await db.from("user_roles").delete().eq("user_id", userId);
+  const { error } = await db
+    .from("user_roles")
+    .insert({ user_id: userId, role, granted_by: actor.id });
+
+  if (error) return { ok: false, error: "Could not change that role." };
+
+  revalidatePath("/admin/customers");
+  return { ok: true, message: `Role set to ${role}.` };
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+export async function saveSetting(
+  key: string,
+  value: unknown,
+): Promise<AdminState> {
+  const actor = await requireAdmin();
+  const db = createAdminClient();
+
+  const { error } = await db
+    .from("settings")
+    .update({ value, updated_by: actor.id })
+    .eq("key", key);
+
+  if (error) return { ok: false, error: "Could not save that setting." };
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Saved." };
+}
+
+export async function saveSettings(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requireAdmin();
+  const db = createAdminClient();
+
+  const updates: { key: string; value: unknown }[] = [];
+  for (const [key, raw] of formData.entries()) {
+    if (!key.startsWith("setting__")) continue;
+    const settingKey = key.slice("setting__".length);
+    const text = String(raw);
+
+    // Settings are jsonb. Numbers stay numbers so the app can do arithmetic
+    // without parsing; everything else is stored as a JSON string.
+    let value: unknown = text;
+    if (text.trim() !== "" && !Number.isNaN(Number(text)) && /^\d+$/.test(text.trim())) {
+      value = Number(text);
+    }
+    updates.push({ key: settingKey, value });
+  }
+
+  for (const u of updates) {
+    await db
+      .from("settings")
+      .update({ value: u.value, updated_by: actor.id })
+      .eq("key", u.key);
+  }
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+  return { ok: true, message: `${updates.length} settings saved.` };
+}
+
+// ── Delivery zones ──────────────────────────────────────────────────────────
+
+export async function saveDeliveryZone(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requireStaff();
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { ok: false, error: "The zone needs a name." };
+
+  const minDays = Number(formData.get("min_days") ?? 1);
+  const maxDays = Number(formData.get("max_days") ?? 3);
+  if (maxDays < minDays) {
+    return { ok: false, error: "Maximum days cannot be less than minimum days." };
+  }
+
+  const freeAbove = String(formData.get("free_above") ?? "").trim();
+
+  const row = {
+    name,
+    slug: String(formData.get("slug") ?? "").trim() || slugify(name),
+    fee_paisa: takaToPaisa(String(formData.get("fee") ?? "0")),
+    free_above_paisa: freeAbove ? takaToPaisa(freeAbove) : null,
+    min_days: minDays,
+    max_days: maxDays,
+    districts: String(formData.get("districts") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    is_active: formData.get("is_active") === "on",
+  };
+
+  const db = createAdminClient();
+  const { error } = id
+    ? await db.from("delivery_zones").update(row).eq("id", id)
+    : await db.from("delivery_zones").insert(row);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Delivery zone saved." };
+}

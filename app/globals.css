@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/*
+ * Bidyut design tokens.
+ *
+ * Tailwind v4 is CSS-first: these @theme entries generate the utility classes
+ * (bg-brand, text-ink-muted …). There is no tailwind.config.js and there should
+ * not be one.
+ *
+ * The palette is built around the electric blue already used by the seeded hero
+ * banners (#1B4DFF) so admin-authored accents and the chrome agree. Neutrals are
+ * warm rather than pure grey — a cool grey next to a ৳ sign reads as a spec
+ * sheet, not a shop.
+ */
+@theme {
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #7c8cfa;
+  --color-brand-500: #4f63f5;
+  --color-brand-600: #1b4dff;
+  --color-brand-700: #1739cc;
+  --color-brand-800: #172ea3;
+  --color-brand-900: #1a2b80;
+
+  --color-ink: #14161a;
+  --color-ink-soft: #3d434d;
+  --color-ink-muted: #6b7280;
+  --color-ink-faint: #9aa1ad;
+
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f7f7f5;
+  --color-surface-raised: #ffffff;
+  --color-line: #e6e5e1;
+  --color-line-strong: #d3d2cd;
+
+  --color-success: #0f766e;
+  --color-success-soft: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #be123c;
+  --color-danger-soft: #fff1f2;
+  --color-sale: #d92d20;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans Bengali", sans-serif;
+
+  --radius-card: 0.75rem;
+
+  --shadow-card: 0 1px 2px rgb(20 22 26 / 0.04), 0 1px 3px rgb(20 22 26 / 0.06);
+  --shadow-lift: 0 4px 12px rgb(20 22 26 / 0.08), 0 2px 4px rgb(20 22 26 / 0.04);
+  --shadow-pop: 0 12px 32px rgb(20 22 26 / 0.12);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--color-surface-sunken);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Prices and order numbers line up in a column only if the digits do. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* The mobile filter drawer locks the body; keep the scrollbar gap stable. */
+  body:has(dialog[open]) {
+    overflow: hidden;
+  }
+}
+
+@layer utilities {
+  /* Horizontal rails: scroll-snap without a visible scrollbar. */
+  .rail {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-snap-type: x mandatory;
+  }
+  .rail::-webkit-scrollbar {
+    display: none;
+  }
+  .rail > * {
+    scroll-snap-align: start;
+  }
+
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-line);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.6),
+      transparent
+    );
+    animation: shimmer 1.4s infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

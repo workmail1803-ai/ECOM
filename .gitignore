@@ -1,0 +1,27 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+.env
+.env.*
+!.env.example
+
+*.tsbuildinfo
+next-env.d.ts
+
+.DS_Store
+Thumbs.db
+
+.vercel
+.turbo
+
+# Local reference clone of the upstream starter (inspection only, not shipped)
+.ref/
+
+coverage/
+.vitest/
+
+supabase/.temp/
+supabase/.branches/

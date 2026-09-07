@@ -1,0 +1,319 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Truck, ShieldCheck, RotateCcw, Check } from "lucide-react";
+import {
+  getProductBySlug,
+  getRelatedProducts,
+  getProductReviews,
+  averageRating,
+} from "@/lib/queries/catalog";
+import { getStoreSettings, getDeliveryZones } from "@/lib/queries/settings";
+import { getSessionUser } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
+import { Gallery } from "@/components/product/gallery";
+import { BuyBox } from "@/components/product/buy-box";
+import { ReviewsSection } from "@/components/product/reviews-section";
+import { RecentlyViewedTracker } from "@/components/product/recently-viewed";
+import { Section, ProductRail } from "@/components/storefront/sections";
+import { Rating, Badge } from "@/components/ui/primitives";
+import { formatTaka } from "@/lib/utils/money";
+import type { SpecItem } from "@/types/database";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+  if (!product) return { title: "Product not found" };
+
+  return {
+    title: product.name,
+    description:
+      product.short_description ?? product.description?.slice(0, 160) ?? undefined,
+    openGraph: {
+      title: product.name,
+      description: product.short_description ?? undefined,
+      images: product.thumbnail_url ? [product.thumbnail_url] : undefined,
+    },
+  };
+}
+
+export default async function ProductPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+
+  if (!product || product.status !== "active") notFound();
+
+  const [related, reviews, settings, zones, user] = await Promise.all([
+    getRelatedProducts(product),
+    getProductReviews(product.id),
+    getStoreSettings(),
+    getDeliveryZones(),
+    getSessionUser(),
+  ]);
+
+  // Has this customer bought and received it? Gates the review form, and RLS
+  // enforces the same rule independently on insert.
+  let canReview = false;
+  let alreadyReviewed = false;
+  if (user) {
+    const supabase = await createClient();
+    const [{ data: delivered }, { data: mine }] = await Promise.all([
+      supabase
+        .from("order_items")
+        .select("id, orders!inner(status, user_id)")
+        .eq("product_id", product.id)
+        .eq("orders.user_id", user.id)
+        .eq("orders.status", "delivered")
+        .limit(1),
+      supabase
+        .from("reviews")
+        .select("id")
+        .eq("product_id", product.id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+    canReview = (delivered?.length ?? 0) > 0;
+    alreadyReviewed = Boolean(mine);
+  }
+
+  const rating = averageRating(product);
+  const inStock = product.stock > 0;
+  const lowStock = inStock && product.stock <= settings.low_stock_banner_threshold;
+  const specs = (product.specifications ?? []) as SpecItem[];
+  const dhaka = zones.find((z) => z.slug === "inside-dhaka") ?? zones[0];
+
+  // Product JSON-LD so Google can render price and availability in results.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    image: product.thumbnail_url ? [product.thumbnail_url] : [],
+    description: product.short_description ?? product.description ?? "",
+    sku: product.sku,
+    brand: product.brand ? { "@type": "Brand", name: product.brand.name } : undefined,
+    offers: {
+      "@type": "Offer",
+      priceCurrency: "BDT",
+      price: (product.price_paisa / 100).toFixed(2),
+      availability: inStock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+    },
+    aggregateRating:
+      rating && product.rating_count
+        ? {
+            "@type": "AggregateRating",
+            ratingValue: rating,
+            reviewCount: product.rating_count,
+          }
+        : undefined,
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <RecentlyViewedTracker productId={product.id} signedIn={Boolean(user)} />
+
+      <nav aria-label="Breadcrumb" className="mb-4 text-xs text-ink-muted">
+        <Link href="/" className="hover:text-brand-700">
+          Home
+        </Link>
+        <span className="mx-1.5">/</span>
+        <Link href="/products" className="hover:text-brand-700">
+          Products
+        </Link>
+        {product.category ? (
+          <>
+            <span className="mx-1.5">/</span>
+            <Link
+              href={`/products?category=${product.category.slug}`}
+              className="hover:text-brand-700"
+            >
+              {product.category.name}
+            </Link>
+          </>
+        ) : null}
+      </nav>
+
+      <div className="grid gap-8 lg:grid-cols-2">
+        <Gallery
+          images={product.images}
+          thumbnail={product.thumbnail_url}
+          videoUrl={product.video_url}
+          alt={product.name}
+        />
+
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {product.brand ? (
+              <Link
+                href={`/products?brand=${product.brand.slug}`}
+                className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                {product.brand.name}
+              </Link>
+            ) : null}
+            {product.is_new_arrival ? <Badge tone="brand">New arrival</Badge> : null}
+            {product.is_best_seller ? <Badge tone="warning">Best seller</Badge> : null}
+          </div>
+
+          <h1 className="mt-1.5 text-2xl font-bold leading-8 tracking-tight text-ink sm:text-3xl">
+            {product.name}
+          </h1>
+
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
+            <Rating value={rating} count={product.rating_count || undefined} size={16} />
+            <span className="text-xs text-ink-faint">SKU {product.sku}</span>
+            {product.units_sold > 0 ? (
+              <span className="text-xs text-ink-muted tabular">
+                {product.units_sold} sold
+              </span>
+            ) : null}
+          </div>
+
+          {product.short_description ? (
+            <p className="mt-3 text-sm leading-6 text-ink-soft">
+              {product.short_description}
+            </p>
+          ) : null}
+
+          <BuyBox
+            product={product}
+            variants={product.variants}
+            lowStockThreshold={settings.low_stock_banner_threshold}
+            signedIn={Boolean(user)}
+          />
+
+          {/* Delivery, warranty and returns — the three questions every BD
+              shopper asks before agreeing to cash on delivery. */}
+          <div className="mt-6 divide-y divide-line rounded-xl border border-line bg-surface">
+            <div className="flex gap-3 p-4">
+              <Truck size={18} className="mt-0.5 shrink-0 text-brand-600" />
+              <div className="text-sm">
+                <p className="font-medium text-ink">
+                  Delivery from {dhaka ? formatTaka(dhaka.fee_paisa) : "৳60"}
+                </p>
+                <p className="mt-0.5 text-ink-muted">
+                  {dhaka
+                    ? `Inside Dhaka in ${dhaka.min_days}–${dhaka.max_days} days. `
+                    : ""}
+                  {product.delivery_note ??
+                    "Charges for your district are calculated at checkout."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4">
+              <ShieldCheck size={18} className="mt-0.5 shrink-0 text-success" />
+              <div className="text-sm">
+                <p className="font-medium text-ink">
+                  {product.warranty ?? "Official warranty"}
+                </p>
+                <p className="mt-0.5 text-ink-muted">{settings.warranty_note}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4">
+              <RotateCcw size={18} className="mt-0.5 shrink-0 text-warning" />
+              <div className="text-sm">
+                <p className="font-medium text-ink">
+                  {settings.return_window_days}-day replacement
+                </p>
+                <p className="mt-0.5 text-ink-muted">
+                  Dead-on-arrival, wrong variant or a defect — we swap it, no argument.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {lowStock ? (
+            <p className="mt-4 rounded-lg border border-warning/20 bg-warning-soft px-3 py-2 text-sm font-medium text-warning">
+              Only {product.stock} left in stock.
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {product.features.length > 0 ? (
+        <section className="mt-12">
+          <h2 className="text-lg font-bold tracking-tight text-ink">Key features</h2>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {product.features.map((f) => (
+              <li key={f} className="flex gap-2 text-sm text-ink-soft">
+                <Check size={16} className="mt-0.5 shrink-0 text-success" />
+                {f}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {product.description ? (
+        <section className="mt-10">
+          <h2 className="text-lg font-bold tracking-tight text-ink">Description</h2>
+          <div className="mt-3 max-w-3xl whitespace-pre-line text-sm leading-7 text-ink-soft">
+            {product.description}
+          </div>
+        </section>
+      ) : null}
+
+      {specs.length > 0 ? (
+        <section className="mt-10">
+          <h2 className="text-lg font-bold tracking-tight text-ink">
+            Full specifications
+          </h2>
+          <div className="mt-3 max-w-3xl overflow-hidden rounded-xl border border-line">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-line">
+                {specs.map((s, i) => (
+                  <tr key={`${s.label}-${i}`} className={i % 2 ? "bg-surface" : "bg-surface-sunken"}>
+                    <th
+                      scope="row"
+                      className="w-2/5 px-4 py-2.5 text-left font-medium text-ink-soft"
+                    >
+                      {s.label}
+                    </th>
+                    <td className="px-4 py-2.5 text-ink">{s.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      <ReviewsSection
+        productId={product.id}
+        reviews={reviews}
+        rating={rating}
+        ratingCount={product.rating_count}
+        canReview={canReview}
+        alreadyReviewed={alreadyReviewed}
+        signedIn={Boolean(user)}
+      />
+
+      {related.length > 0 ? (
+        <Section
+          title="You might also like"
+          href={
+            product.category ? `/products?category=${product.category.slug}` : "/products"
+          }
+          className="!px-0"
+        >
+          <ProductRail products={related} />
+        </Section>
+      ) : null}
+    </div>
+  );
+}
