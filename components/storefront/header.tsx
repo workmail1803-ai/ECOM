@@ -16,7 +16,7 @@ export async function Header() {
     getSessionUser(),
   ]);
 
-  const topLevel = categories.filter((c) => !c.parent_id).slice(0, 8);
+  const topLevel = categories.filter((c) => !c.parent_id);
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">

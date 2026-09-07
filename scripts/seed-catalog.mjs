@@ -226,8 +226,8 @@ async function main() {
         title: "Your router does not have to go dark",
         subtitle:
           "Mini UPS units that keep the router and ONU running 6–8 hours. Switchover in under 10ms.",
-        image_url: IMG("1558618666-fcd25c85cd64", 1600),
-        mobile_image_url: IMG("1558618666-fcd25c85cd64", 800),
+        image_url: LOCAL("a70"),
+        mobile_image_url: LOCAL("a70"),
         cta_label: "Shop mini UPS",
         cta_href: "/products?category=mini-ups",
         accent_hex: "#0F766E",

@@ -51,7 +51,7 @@ export const CATEGORIES = [
     description: "Keep your router and ONU alive through a load-shedding cut.",
     position: 3,
     is_featured: true,
-    image_url: img("1558618666-fcd25c85cd64", 600),
+    image_url: local("a70"),
   },
   {
     slug: "projector",
