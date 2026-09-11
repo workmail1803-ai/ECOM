@@ -56,3 +56,23 @@ export type ManualMethod = keyof typeof MANUAL_ACCOUNT_KEYS;
 export function isManualMethod(v: string): v is ManualMethod {
   return v === "bkash" || v === "nagad";
 }
+
+/**
+ * Manual submissions are marked by the shape of `payments.idempotency_key`.
+ *
+ * That column already carries a partial UNIQUE index, which is exactly the
+ * guarantee this feature needs: one transaction ID can be claimed against one
+ * order and no other. Reusing it means manual verification needs no schema
+ * change at all — the alternative was an `is_manual` boolean plus a second
+ * unique index doing the same job.
+ */
+export const MANUAL_KEY_PREFIX = "manual:";
+
+export function manualIdempotencyKey(provider: ManualMethod, txnId: string): string {
+  return `${MANUAL_KEY_PREFIX}${provider}:${txnId.trim().toUpperCase()}`;
+}
+
+/** True when this payment row came from a customer-submitted transfer. */
+export function isManualSubmission(idempotencyKey: string | null): boolean {
+  return Boolean(idempotencyKey?.startsWith(MANUAL_KEY_PREFIX));
+}

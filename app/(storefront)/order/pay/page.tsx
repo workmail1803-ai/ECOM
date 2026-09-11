@@ -4,7 +4,11 @@ import { notFound } from "next/navigation";
 import { Smartphone, Wallet, Copy, ShieldCheck, Clock } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStoreSettings } from "@/lib/queries/settings";
-import { MANUAL_ACCOUNT_KEYS, isManualMethod } from "@/lib/payments/manual";
+import {
+  MANUAL_ACCOUNT_KEYS,
+  isManualMethod,
+  isManualSubmission,
+} from "@/lib/payments/manual";
 import { PaymentProofForm } from "@/components/checkout/payment-proof-form";
 import { CopyableNumber } from "@/components/checkout/copyable-number";
 import { Card, Badge } from "@/components/ui/primitives";
@@ -83,8 +87,26 @@ export default async function PayPage({
   const Icon = method === "bkash" ? Smartphone : Wallet;
   const accent = method === "bkash" ? "#E2136E" : "#EE7623";
 
-  const alreadyPaid = order.payment_status === "successful";
-  const awaiting = order.payment_status === "pending";
+  // `place_order()` leaves every non-COD order at payment_status 'pending', so
+  // that field cannot distinguish "waiting for the customer to send money" from
+  // "customer has submitted and we are checking". The payment row can: a manual
+  // submission stamps the marker into idempotency_key.
+  const { data: payment } = await admin
+    .from("payments")
+    .select("status, idempotency_key, failure_reason")
+    .eq("order_id", order.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{
+      status: string;
+      idempotency_key: string | null;
+      failure_reason: string | null;
+    }>();
+
+  const submitted = isManualSubmission(payment?.idempotency_key ?? null);
+  const alreadyPaid = payment?.status === "successful";
+  const awaiting = submitted && payment?.status === "pending";
+  const rejected = submitted && payment?.status === "failed";
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
@@ -120,7 +142,17 @@ export default async function PayPage({
         </Card>
       ) : (
         <>
-          {awaiting ? (
+          {rejected ? (
+            <Card className="mt-6 border-danger/25 bg-danger-soft p-4">
+              <p className="text-sm font-semibold text-danger">
+                We could not verify your last submission.
+              </p>
+              <p className="mt-1 text-xs leading-5 text-danger/85">
+                {payment?.failure_reason ??
+                  "Check the transaction ID against your payment SMS and submit it again below."}
+              </p>
+            </Card>
+          ) : awaiting ? (
             <Card className="mt-6 border-warning/25 bg-warning-soft p-4">
               <p className="flex items-center gap-2 text-sm font-medium text-warning">
                 <Clock size={15} />

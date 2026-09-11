@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireStaff, requireAdmin, requirePermission } from "@/lib/auth/session";
 import { takaToPaisa } from "@/lib/utils/money";
+import { isManualSubmission } from "@/lib/payments/manual";
 import type { OrderStatus } from "@/types/database";
 
 /**
@@ -625,26 +626,113 @@ export async function verifyManualPayment(
   approve: boolean,
   reason?: string,
 ): Promise<AdminState> {
-  await requirePermission("payments");
-  // User-scoped client on purpose: the function reads auth.uid() to stamp
-  // verified_by, so the caller's identity has to reach Postgres.
-  const supabase = await createClient();
+  const actor = await requirePermission("payments");
+  const db = createAdminClient();
 
-  const { error } = await supabase.rpc("verify_manual_payment", {
-    p_payment_id: paymentId,
-    p_approve: approve,
-    p_reason: reason ?? null,
+  const { data: payment } = await db
+    .from("payments")
+    .select("id, order_id, status, amount_paisa, provider, idempotency_key, provider_txn_id")
+    .eq("id", paymentId)
+    .maybeSingle<{
+      id: string;
+      order_id: string;
+      status: string;
+      amount_paisa: number;
+      provider: string;
+      idempotency_key: string | null;
+      provider_txn_id: string | null;
+    }>();
+
+  if (!payment) return { ok: false, error: "That payment no longer exists." };
+  if (!isManualSubmission(payment.idempotency_key)) {
+    return { ok: false, error: "That payment is not a manual submission." };
+  }
+  // Idempotent: a second approval of a settled payment is a no-op, not a
+  // double-confirm.
+  if (payment.status === "successful") {
+    return { ok: true, message: "That payment was already verified." };
+  }
+
+  const { data: order } = await db
+    .from("orders")
+    .select("id, order_number, status")
+    .eq("id", payment.order_id)
+    .maybeSingle<{ id: string; order_number: string; status: string }>();
+
+  if (!order) return { ok: false, error: "That order no longer exists." };
+
+  if (approve) {
+    await db
+      .from("payments")
+      .update({
+        status: "successful",
+        settled_at: new Date().toISOString(),
+        failure_reason: null,
+      })
+      .eq("id", payment.id);
+
+    await db
+      .from("orders")
+      .update({ payment_status: "successful" })
+      .eq("id", order.id);
+
+    // A verified payment confirms the order, mirroring settle_payment().
+    if (order.status === "placed") {
+      await db
+        .from("orders")
+        .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+        .eq("id", order.id);
+
+      await db.from("order_status_history").insert({
+        order_id: order.id,
+        status: "confirmed",
+        note: "Payment verified",
+        changed_by: actor.id,
+      });
+    }
+  } else {
+    await db
+      .from("payments")
+      .update({
+        status: "failed",
+        failure_reason: reason?.trim() || "Could not verify this payment",
+      })
+      .eq("id", payment.id);
+
+    // The order is deliberately NOT cancelled: a mistyped transaction ID
+    // should cost a correction, not the sale.
+    await db
+      .from("orders")
+      .update({ payment_status: "failed" })
+      .eq("id", order.id);
+  }
+
+  await db.from("payment_transactions").insert({
+    payment_id: payment.id,
+    event: approve ? "manual_approve" : "manual_reject",
+    status: approve ? "successful" : "failed",
+    amount_paisa: payment.amount_paisa,
+    payload: {
+      verified_by: actor.id,
+      verified_by_name: actor.profile?.full_name ?? actor.email,
+      verified_at: new Date().toISOString(),
+      reason: reason ?? null,
+      txn_id: payment.provider_txn_id,
+    },
   });
 
-  if (error) {
-    if (error.message.includes("forbidden")) {
-      return { ok: false, error: "You do not have permission to verify payments." };
-    }
-    if (error.message.includes("not_a_manual_payment")) {
-      return { ok: false, error: "That payment is not a manual submission." };
-    }
-    return { ok: false, error: "Could not record that decision." };
-  }
+  // Who decided what, in the tamper-evident log.
+  const supabase = await createClient();
+  await supabase.rpc("log_audit", {
+    p_action: approve ? "payment.verify" : "payment.reject",
+    p_entity_type: "payment",
+    p_entity_id: payment.id,
+    p_changes: {
+      order: order.order_number,
+      txn: payment.provider_txn_id,
+      reason: reason ?? null,
+    },
+  });
 
   revalidatePath("/admin/payments");
   revalidatePath("/admin/orders");
@@ -685,28 +773,51 @@ export async function setStaffAccess(
   role: "customer" | "manager" | "admin",
   permissions: string[],
 ): Promise<AdminState> {
-  await requireAdmin();
-  const supabase = await createClient();
+  const actor = await requireAdmin();
 
+  if (userId === actor.id) {
+    return { ok: false, error: "You cannot change your own access." };
+  }
+
+  const supabase = await createClient();
   const { error } = await supabase.rpc("set_staff_access", {
     p_user_id: userId,
     p_role: role,
     p_permissions: role === "manager" ? permissions : [],
   });
 
-  if (error) {
-    if (error.message.includes("cannot_change_own_access")) {
-      return { ok: false, error: "You cannot change your own access." };
-    }
-    if (error.message.includes("forbidden")) {
-      return { ok: false, error: "Only a full admin can manage staff." };
-    }
-    return { ok: false, error: "Could not update that account." };
+  if (!error) {
+    revalidatePath("/admin/staff");
+    revalidatePath("/admin/customers");
+    return { ok: true, message: "Access updated." };
   }
+
+  if (error.message.includes("cannot_change_own_access")) {
+    return { ok: false, error: "You cannot change your own access." };
+  }
+  if (error.message.includes("forbidden")) {
+    return { ok: false, error: "Only a full admin can manage staff." };
+  }
+
+  // set_staff_access() and staff_permissions arrive with migration 0015. Until
+  // it is applied, fall back to setting the role alone — that still works, and
+  // a manager without the grants table simply has the old all-or-nothing
+  // access rather than no access.
+  const db = createAdminClient();
+  await db.from("user_roles").delete().eq("user_id", userId);
+  const { error: roleError } = await db
+    .from("user_roles")
+    .insert({ user_id: userId, role, granted_by: actor.id });
+
+  if (roleError) return { ok: false, error: "Could not update that account." };
 
   revalidatePath("/admin/staff");
   revalidatePath("/admin/customers");
-  return { ok: true, message: "Access updated." };
+  return {
+    ok: true,
+    message:
+      "Role updated. Per-section permissions need migration 0015 applied first.",
+  };
 }
 
 /** Look an account up by email so an admin can promote it to staff. */

@@ -2,21 +2,25 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { bdPhone } from "@/lib/validations/checkout";
+import { isManualMethod, manualIdempotencyKey } from "@/lib/payments/manual";
 
 /**
  * Customer submission of a manual bKash/Nagad transfer.
  *
- * The order number alone is not enough to submit against an order — it comes
- * from a sequence and is guessable. The mobile number on the order is the
- * second factor, exactly as it is for order tracking.
+ * Two things carry the security here, and neither is the UI:
  *
- * The screenshot is uploaded server-side with the service-role client AFTER
- * that check passes. The `payment-proofs` bucket has no client write policy at
- * all, so an anonymous visitor can never put a file in storage merely because
- * guest checkout exists.
+ *  1. The order number alone is not enough — it comes from a sequence and is
+ *     guessable. The mobile number ON the order is the second factor, the same
+ *     rule order tracking uses.
+ *  2. `payments.idempotency_key` carries a UNIQUE index, and a manual
+ *     submission writes `manual:<provider>:<TXN>` into it. That is what makes
+ *     one transaction ID claimable against exactly one order — enforced by
+ *     Postgres, not by a check in this file that a race could slip past.
+ *
+ * Nothing here marks an order paid. The status only reaches 'pending', and a
+ * staff member decides from /admin/payments.
  */
 
 const PROOF_MIME = ["image/jpeg", "image/png", "image/webp"];
@@ -41,20 +45,9 @@ export interface ProofState {
   fieldErrors?: Record<string, string>;
 }
 
-function submitError(message: string): string {
-  if (message.includes("txn_already_used"))
-    return "That transaction ID has already been submitted against another order. Check the ID and try again.";
-  if (message.includes("order_not_found"))
-    return "No order matches that number and mobile number. Check both and try again.";
-  if (message.includes("already_paid"))
-    return "This order is already marked paid — there is nothing more to send.";
-  if (message.includes("order_closed"))
-    return "This order was cancelled, so a payment cannot be attached to it.";
-  if (message.includes("txn_required")) return "Enter the transaction ID.";
-  if (message.includes("not_a_manual_method"))
-    return "This order was not placed with bKash or Nagad.";
-  return "We could not record that payment. Please try again.";
-}
+/** Same wording for "no such order" and "wrong phone" — see note above. */
+const NO_MATCH =
+  "No order matches that number and mobile number. Check both and try again.";
 
 export async function submitPaymentProof(
   _prev: ProofState,
@@ -72,31 +65,62 @@ export async function submitPaymentProof(
   }
 
   const input = parsed.data;
-  const admin = createAdminClient();
+  const db = createAdminClient();
 
-  // Confirm the order/phone pair BEFORE touching storage, so a bad guess never
-  // costs us an uploaded file.
-  const { data: order } = await admin
+  // ── Identify the order ────────────────────────────────────────────────────
+  const { data: order } = await db
     .from("orders")
-    .select("id, order_number, customer_phone, status")
+    .select("id, order_number, customer_phone, status, payment_method, total_paisa")
     .eq("order_number", input.order_number)
     .maybeSingle<{
       id: string;
       order_number: string;
       customer_phone: string;
       status: string;
+      payment_method: string;
+      total_paisa: number;
     }>();
 
   if (!order || order.customer_phone !== input.phone) {
-    // One message for both cases, so this cannot be used to discover which
-    // order numbers exist.
+    return { ok: false, error: NO_MATCH };
+  }
+  if (order.status === "cancelled" || order.status === "returned") {
     return {
       ok: false,
-      error: "No order matches that number and mobile number. Check both and try again.",
+      error: "This order was cancelled, so a payment cannot be attached to it.",
+    };
+  }
+  if (!isManualMethod(order.payment_method)) {
+    return { ok: false, error: "This order was not placed with bKash or Nagad." };
+  }
+
+  // ── The payment row place_order() created ─────────────────────────────────
+  const { data: payment } = await db
+    .from("payments")
+    .select("id, status, amount_paisa, provider")
+    .eq("order_id", order.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{
+      id: string;
+      status: string;
+      amount_paisa: number;
+      provider: string;
+    }>();
+
+  if (!payment) {
+    return { ok: false, error: "We could not find a payment for that order." };
+  }
+  if (payment.status === "successful") {
+    return {
+      ok: false,
+      error: "This order is already marked paid — there is nothing more to send.",
     };
   }
 
-  // ── Screenshot (optional but strongly encouraged) ─────────────────────────
+  // ── Screenshot ────────────────────────────────────────────────────────────
+  // Uploaded only after the order/phone pair checks out, so a wrong guess never
+  // costs us a stored file. The bucket has no client write policy at all.
   let screenshotPath: string | null = null;
   const file = formData.get("screenshot");
 
@@ -116,42 +140,77 @@ export async function submitPaymentProof(
       };
     }
 
-    const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-    // Foldered by order number so staff can find every attempt for one order,
-    // and suffixed randomly so a re-submission never overwrites the first try.
+    const ext =
+      file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    // Foldered by order so staff can find every attempt, suffixed randomly so a
+    // re-submission never overwrites the first try.
     const path = `${order.order_number}/${crypto.randomUUID()}.${ext}`;
 
-    const { error: uploadError } = await admin.storage
+    const { error: uploadError } = await db.storage
       .from("payment-proofs")
       .upload(path, file, { contentType: file.type, upsert: false });
 
     if (uploadError) {
-      return {
-        ok: false,
-        error: "We could not upload that screenshot. Please try again.",
-      };
+      return { ok: false, error: "We could not upload that screenshot. Please try again." };
     }
     screenshotPath = path;
   }
 
-  // The RPC re-checks the order/phone pair itself — this action's earlier check
-  // is a courtesy to storage, not the authorization.
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("submit_payment_proof", {
-    p_order_number: input.order_number,
-    p_phone: input.phone,
-    p_txn_id: input.txn_id,
-    p_sender_msisdn: input.sender_msisdn,
-    p_screenshot_path: screenshotPath,
+  // ── Record the claim ──────────────────────────────────────────────────────
+  // The unique index on idempotency_key is what rejects a transaction ID that
+  // has already been claimed elsewhere.
+  const { error: claimError } = await db
+    .from("payments")
+    .update({
+      provider_txn_id: input.txn_id,
+      idempotency_key: manualIdempotencyKey(
+        order.payment_method as "bkash" | "nagad",
+        input.txn_id,
+      ),
+      status: "pending",
+      // A re-submission after a rejection clears the previous verdict.
+      failure_reason: null,
+    })
+    .eq("id", payment.id);
+
+  if (claimError) {
+    if (claimError.code === "23505") {
+      // Cleaning up keeps the bucket free of files attached to nothing.
+      if (screenshotPath) {
+        await db.storage.from("payment-proofs").remove([screenshotPath]);
+      }
+      return {
+        ok: false,
+        error:
+          "That transaction ID has already been submitted against another order. Check the ID and try again.",
+        fieldErrors: { txn_id: "Already used" },
+      };
+    }
+    if (screenshotPath) {
+      await db.storage.from("payment-proofs").remove([screenshotPath]);
+    }
+    return { ok: false, error: "We could not record that payment. Please try again." };
+  }
+
+  // Everything the verifier needs that `payments` has no column for.
+  await db.from("payment_transactions").insert({
+    payment_id: payment.id,
+    event: "manual_submit",
+    status: "pending",
+    amount_paisa: payment.amount_paisa,
+    payload: {
+      txn_id: input.txn_id,
+      sender_msisdn: input.sender_msisdn,
+      screenshot_path: screenshotPath,
+      submitted_at: new Date().toISOString(),
+      expected_paisa: order.total_paisa,
+    },
   });
 
-  if (error) {
-    // Do not leave an orphaned file behind if the submission was rejected.
-    if (screenshotPath) {
-      await admin.storage.from("payment-proofs").remove([screenshotPath]);
-    }
-    return { ok: false, error: submitError(error.message) };
-  }
+  await db
+    .from("orders")
+    .update({ payment_status: "pending" })
+    .eq("id", order.id);
 
   revalidatePath("/account/orders");
   revalidatePath("/admin/payments");

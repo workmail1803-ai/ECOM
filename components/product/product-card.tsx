@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ImageOff } from "lucide-react";
 import { Badge, Rating } from "@/components/ui/primitives";
 import { AddToCartButton } from "@/components/cart/add-to-cart-button";
+import { BuyNowButton } from "@/components/cart/buy-now-button";
 import { formatTaka, discountPercent } from "@/lib/utils/money";
 import { averageRating, type ProductCard as ProductCardData } from "@/lib/queries/catalog";
 import { cn } from "@/lib/utils/cn";
@@ -93,13 +94,27 @@ export function ProductCard({
           </p>
         ) : null}
 
-        <AddToCartButton
-          productId={product.id}
-          disabled={outOfStock}
-          size="sm"
-          block
-          label="Add to cart"
-        />
+        {/*
+          Stacked rather than side by side: at two columns on a phone a card is
+          about 170px wide, and "Add to cart" alone does not fit next to
+          anything without truncating.
+        */}
+        <div className="space-y-1.5">
+          <AddToCartButton
+            productId={product.id}
+            disabled={outOfStock}
+            size="sm"
+            block
+            label="Add to cart"
+          />
+          <BuyNowButton
+            productId={product.id}
+            disabled={outOfStock}
+            size="sm"
+            variant="outline"
+            block
+          />
+        </div>
       </div>
     </article>
   );
@@ -113,6 +128,7 @@ export function ProductCardSkeleton() {
         <div className="skeleton h-4 w-full rounded" />
         <div className="skeleton h-4 w-2/3 rounded" />
         <div className="skeleton h-5 w-1/3 rounded" />
+        <div className="skeleton h-9 w-full rounded-lg" />
         <div className="skeleton h-9 w-full rounded-lg" />
       </div>
     </div>

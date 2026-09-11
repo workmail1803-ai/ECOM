@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
@@ -8,9 +9,17 @@ import { createServerClient } from "@supabase/ssr";
  * so RLS is the thing deciding what comes back. Never widen a permission by
  * reaching for the service-role client — fix the policy instead.
  *
+ * Wrapped in React `cache`, which is load-bearing rather than an optimisation.
+ * A single page render calls this from several places — the header's cart
+ * quote, the session lookup, a page query — and each client keeps its own auth
+ * state. Without the cache, an expired access token means several of them try
+ * to refresh at once; Supabase ROTATES refresh tokens, so the first refresh
+ * wins and the rest fail with `refresh_token_already_used`, which silently
+ * signs the user out mid-request. One client per request means one refresh.
+ *
  * `cookies()` is async in Next 15+, so this function is too.
  */
-export async function createClient() {
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -35,4 +44,4 @@ export async function createClient() {
       },
     },
   );
-}
+});

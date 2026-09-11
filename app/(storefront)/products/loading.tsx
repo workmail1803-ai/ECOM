@@ -32,6 +32,7 @@ export default function ProductsLoading() {
                 <div className="skeleton h-4 w-2/3 rounded" />
                 <div className="skeleton h-5 w-1/3 rounded" />
                 <div className="skeleton h-9 w-full rounded-lg" />
+                <div className="skeleton h-9 w-full rounded-lg" />
               </div>
             </div>
           ))}
