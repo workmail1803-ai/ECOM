@@ -81,6 +81,39 @@ const upsert = (table, rows, onConflict) =>
     prefer: "resolution=merge-duplicates,return=representation",
   });
 
+/**
+ * The database server's clock, not this machine's.
+ *
+ * Seeded time windows (a flash sale, a coupon) are compared against the
+ * server's `now()` at render time. If the machine running this script is even a
+ * little fast, a sale seeded as "started a minute ago" is still in the future
+ * as far as production is concerned and silently never appears. One developer
+ * machine here was ~12 hours ahead, which is exactly how that failure looks:
+ * correct code, correct data, invisible section.
+ *
+ * PostgREST returns a `Date` header on every response, so the authoritative
+ * clock is one HEAD request away.
+ */
+async function serverNow() {
+  const res = await fetch(`${URL}/rest/v1/`, {
+    method: "HEAD",
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+  });
+  const header = res.headers.get("date");
+  if (!header) {
+    console.warn("  ! no Date header; falling back to this machine's clock");
+    return new Date();
+  }
+  const server = new Date(header);
+  const skewMs = Math.abs(server.getTime() - Date.now());
+  if (skewMs > 5 * 60 * 1000) {
+    console.warn(
+      `  ! this machine's clock is ${Math.round(skewMs / 60000)} min off the server's — using the server's`,
+    );
+  }
+  return server;
+}
+
 async function main() {
   console.log(`Seeding catalog into ${new global.URL(URL).hostname}\n`);
 
@@ -330,7 +363,7 @@ async function main() {
 
   // ── Flash sale (opt-in) ───────────────────────────────────────────────────
   if (withFlash) {
-    const now = new Date();
+    const now = await serverNow();
     // Two weeks, not three days: a demo sale that quietly expires over a
     // weekend looks like the section is broken.
     const ends = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
@@ -342,7 +375,9 @@ async function main() {
           id: "f1000000-0000-4000-8000-000000000001",
           title: "Weekend flash sale",
           subtitle: "Limited stock at these prices.",
-          starts_at: new Date(now.getTime() - 60_000).toISOString(),
+          // A day back, not a minute: a sale must be live even if a clock is
+          // a few hours out somewhere in the chain.
+          starts_at: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
           ends_at: ends.toISOString(),
           is_active: true,
         },
