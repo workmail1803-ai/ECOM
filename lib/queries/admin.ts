@@ -1,8 +1,8 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireStaff } from "@/lib/auth/session";
-import type { Order, OrderStatus } from "@/types/database";
+import { requireStaff, requireAdmin } from "@/lib/auth/session";
+import type { AppRole, Order, OrderStatus } from "@/types/database";
 
 /**
  * Admin reads.
@@ -247,4 +247,190 @@ export async function listAdminOrders(filter: {
   }
 
   return orders.map((o) => ({ ...o, item_count: byOrder.get(o.id) ?? 0 }));
+}
+
+// ── Manual payment verification ─────────────────────────────────────────────
+
+export interface ManualPaymentRow {
+  id: string;
+  order_id: string;
+  provider: string;
+  status: string;
+  amount_paisa: number;
+  provider_txn_id: string | null;
+  sender_msisdn: string | null;
+  screenshot_path: string | null;
+  submitted_at: string | null;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  order_number: string;
+  customer_name: string;
+  customer_phone: string;
+  order_status: string;
+  verified_by_name: string | null;
+}
+
+/**
+ * Manual bKash/Nagad submissions, newest first.
+ *
+ * `pendingOnly` drives the verification queue; the full list is the audit
+ * trail of what was approved or rejected and by whom.
+ */
+export async function listManualPayments(
+  pendingOnly = false,
+): Promise<ManualPaymentRow[]> {
+  await requireStaff();
+  const db = createAdminClient();
+
+  let q = db
+    .from("payments")
+    .select(
+      "id, order_id, provider, status, amount_paisa, provider_txn_id, sender_msisdn, " +
+        "screenshot_path, submitted_at, verified_at, verified_by, rejection_reason",
+    )
+    .eq("is_manual", true)
+    .order("submitted_at", { ascending: false, nullsFirst: false })
+    .limit(200);
+
+  if (pendingOnly) q = q.in("status", ["initiated", "pending"]);
+
+  const { data, error } = await q;
+  // The is_manual column only exists after migration 0015. Degrade to an empty
+  // queue rather than breaking the whole payments page.
+  if (error) return [];
+
+  // Exactly the columns selected above. `verified_by` is a uuid here and is
+  // resolved to a display name below.
+  interface RawManualPayment {
+    id: string;
+    order_id: string;
+    provider: string;
+    status: string;
+    amount_paisa: number;
+    provider_txn_id: string | null;
+    sender_msisdn: string | null;
+    screenshot_path: string | null;
+    submitted_at: string | null;
+    verified_at: string | null;
+    verified_by: string | null;
+    rejection_reason: string | null;
+  }
+
+  const rows = (data ?? []) as unknown as RawManualPayment[];
+
+  if (rows.length === 0) return [];
+
+  const [{ data: orders }, { data: staff }] = await Promise.all([
+    db
+      .from("orders")
+      .select("id, order_number, customer_name, customer_phone, status")
+      .in("id", rows.map((r) => r.order_id)),
+    db
+      .from("profiles")
+      .select("id, full_name, email")
+      .in(
+        "id",
+        rows.map((r) => r.verified_by).filter((v): v is string => Boolean(v)),
+      ),
+  ]);
+
+  const orderById = new Map(
+    ((orders ?? []) as {
+      id: string;
+      order_number: string;
+      customer_name: string;
+      customer_phone: string;
+      status: string;
+    }[]).map((o) => [o.id, o]),
+  );
+  const staffById = new Map(
+    ((staff ?? []) as { id: string; full_name: string | null; email: string | null }[]).map(
+      (s) => [s.id, s.full_name ?? s.email],
+    ),
+  );
+
+  return rows.map((r) => {
+    const o = orderById.get(r.order_id);
+    return {
+      ...r,
+      order_number: o?.order_number ?? "—",
+      customer_name: o?.customer_name ?? "—",
+      customer_phone: o?.customer_phone ?? "",
+      order_status: o?.status ?? "",
+      verified_by_name: r.verified_by ? staffById.get(r.verified_by) ?? null : null,
+    };
+  });
+}
+
+/** Badge count for the admin nav. Cheap: a head request with an exact count. */
+export async function countPendingManualPayments(): Promise<number> {
+  const db = createAdminClient();
+  const { count, error } = await db
+    .from("payments")
+    .select("id", { count: "exact", head: true })
+    .eq("is_manual", true)
+    .in("status", ["initiated", "pending"]);
+
+  // Pre-0015 the column does not exist; a zero badge is the right answer then.
+  return error ? 0 : (count ?? 0);
+}
+
+// ── Staff ───────────────────────────────────────────────────────────────────
+
+export interface StaffMember {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: AppRole;
+  permissions: string[];
+  created_at: string;
+}
+
+/** Everyone with an admin or manager role, plus each manager's grants. */
+export async function listStaff(): Promise<StaffMember[]> {
+  await requireAdmin();
+  const db = createAdminClient();
+
+  const { data: roles } = await db
+    .from("user_roles")
+    .select("user_id, role")
+    .in("role", ["admin", "manager"]);
+
+  const rows = (roles ?? []) as { user_id: string; role: AppRole }[];
+  if (rows.length === 0) return [];
+
+  const ids = [...new Set(rows.map((r) => r.user_id))];
+
+  const [{ data: profiles }, grants] = await Promise.all([
+    db.from("profiles").select("id, full_name, email, phone, created_at").in("id", ids),
+    db.from("staff_permissions").select("user_id, permission").in("user_id", ids),
+  ]);
+
+  const permsByUser = new Map<string, string[]>();
+  for (const g of ((grants.data ?? []) as { user_id: string; permission: string }[])) {
+    permsByUser.set(g.user_id, [...(permsByUser.get(g.user_id) ?? []), g.permission]);
+  }
+
+  // Highest role wins, matching my_role().
+  const RANK: Record<AppRole, number> = { customer: 1, manager: 2, admin: 3 };
+  const roleByUser = new Map<string, AppRole>();
+  for (const r of rows) {
+    const cur = roleByUser.get(r.user_id);
+    if (!cur || RANK[r.role] > RANK[cur]) roleByUser.set(r.user_id, r.role);
+  }
+
+  return ((profiles ?? []) as {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+    created_at: string;
+  }[])
+    .map((p) => ({
+      ...p,
+      role: roleByUser.get(p.id) ?? "manager",
+      permissions: permsByUser.get(p.id) ?? [],
+    }))
+    .sort((a, b) => (a.role === "admin" ? -1 : b.role === "admin" ? 1 : 0));
 }

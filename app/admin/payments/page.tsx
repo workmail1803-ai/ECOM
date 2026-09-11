@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { CreditCard } from "lucide-react";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { enabledProviders } from "@/lib/payments";
+import { enabledProviders, isManualFlow } from "@/lib/payments";
+import { listManualPayments } from "@/lib/queries/admin";
+import { ManualPaymentCard } from "@/components/admin/manual-payment-card";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui/primitives";
 import { formatTaka } from "@/lib/utils/money";
 import type { Payment } from "@/types/database";
@@ -10,7 +12,7 @@ import type { Payment } from "@/types/database";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPaymentsPage() {
-  await requireStaff();
+  await requirePermission("payments");
   const db = createAdminClient();
 
   const { data } = await db
@@ -35,6 +37,15 @@ export default async function AdminPaymentsPage() {
   );
 
   const live = enabledProviders();
+  const manualEnabled = live.some((p) => isManualFlow(p.id));
+
+  const manual = await listManualPayments();
+  const pendingManual = manual.filter(
+    (m) => m.status === "pending" || m.status === "initiated",
+  );
+  const settledManual = manual.filter(
+    (m) => m.status === "successful" || m.status === "failed",
+  );
   const settled = payments.filter((p) => p.status === "successful");
   const collected = settled.reduce((s, p) => s + p.amount_paisa, 0);
   const outstanding = payments
@@ -45,8 +56,53 @@ export default async function AdminPaymentsPage() {
     <>
       <PageHeader
         title="Payments"
-        description="Online payments are settled by verified gateway callbacks only. COD settles when an order is marked delivered."
+        description="Manual bKash and Nagad transfers are settled by a staff decision. Gateway payments settle by verified callback; COD settles when an order is marked delivered."
       />
+
+      {/* The verification queue comes first: nothing ships until it is clear. */}
+      {pendingManual.length > 0 ? (
+        <section className="mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-base font-semibold text-ink">
+              Awaiting verification
+            </h2>
+            <span className="rounded-full bg-warning px-2 py-0.5 text-[11px] font-bold tabular text-white">
+              {pendingManual.length}
+            </span>
+          </div>
+          <p className="mb-3 text-xs leading-5 text-ink-muted">
+            Check each transaction ID against your wallet statement before
+            approving. Approving marks the order paid and confirms it; rejecting
+            leaves the order open so the customer can resubmit.
+          </p>
+          <div className="space-y-3">
+            {pendingManual.map((row) => (
+              <ManualPaymentCard key={row.id} row={row} />
+            ))}
+          </div>
+        </section>
+      ) : manualEnabled ? (
+        <section className="mb-6 rounded-xl border border-line bg-surface p-4">
+          <h2 className="text-sm font-semibold text-ink">Awaiting verification</h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            Nothing to check right now. Customer bKash and Nagad submissions
+            appear here the moment they are sent.
+          </p>
+        </section>
+      ) : null}
+
+      {settledManual.length > 0 ? (
+        <section className="mb-6">
+          <h2 className="mb-3 text-base font-semibold text-ink">
+            Recently decided
+          </h2>
+          <div className="space-y-3">
+            {settledManual.slice(0, 5).map((row) => (
+              <ManualPaymentCard key={row.id} row={row} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Card className="p-4">

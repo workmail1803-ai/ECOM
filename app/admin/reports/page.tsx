@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRevenueSeries } from "@/lib/queries/admin";
 import { RevenueChart } from "@/components/admin/revenue-chart";
@@ -20,7 +20,7 @@ export default async function AdminReportsPage({
 }: {
   searchParams: Promise<{ days?: string }>;
 }) {
-  await requireStaff();
+  await requirePermission("reports");
   const { days } = await searchParams;
   const window = Math.min(180, Math.max(7, Number(days) || 30));
 

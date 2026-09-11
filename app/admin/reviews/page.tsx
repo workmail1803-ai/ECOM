@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ReviewModeration } from "@/components/admin/review-moderation";
 import { PageHeader, EmptyState } from "@/components/ui/primitives";
@@ -13,7 +13,7 @@ export default async function AdminReviewsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireStaff();
+  await requirePermission("reviews");
   const { status } = await searchParams;
   const active = status ?? "pending";
 

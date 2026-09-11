@@ -1,5 +1,5 @@
 import { Users } from "lucide-react";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CustomerRoleSelect } from "@/components/admin/customer-role-select";
 import { PageHeader, Card, EmptyState, Badge } from "@/components/ui/primitives";
@@ -14,7 +14,7 @@ export default async function AdminCustomersPage({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const staff = await requireStaff();
+  const staff = await requirePermission("customers");
   const { q } = await searchParams;
 
   const db = createAdminClient();

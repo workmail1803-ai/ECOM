@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MapPin, Phone, Mail } from "lucide-react";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { OrderTimeline } from "@/components/checkout/order-timeline";
 import { OrderStatusControl } from "@/components/admin/order-status-control";
@@ -19,7 +19,7 @@ export default async function AdminOrderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireStaff();
+  await requirePermission("orders");
   const db = createAdminClient();
 
   const { data: order } = await db

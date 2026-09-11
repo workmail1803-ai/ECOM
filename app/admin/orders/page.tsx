@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ShoppingBag, ChevronRight } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 import { listAdminOrders } from "@/lib/queries/admin";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export default async function AdminOrdersPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string }>;
 }) {
+  await requirePermission("orders");
   const { status, q } = await searchParams;
   const active = (status ?? "all") as OrderStatus | "all";
 

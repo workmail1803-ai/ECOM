@@ -144,6 +144,17 @@ export async function placeOrder(
     redirect(result.url);
   }
 
+  // Manual wallet transfer: flag the row so it lands in the staff verification
+  // queue, then send the customer to submit their transaction id and proof.
+  // Nothing here marks the order paid — only a staff decision can do that.
+  if (result.kind === "manual") {
+    await admin
+      .from("payments")
+      .update({ is_manual: true, status: "initiated" })
+      .eq("id", payment.id);
+    redirect(result.submitPath);
+  }
+
   redirect(`/order/confirmed?ref=${encodeURIComponent(order.order_number)}`);
 }
 

@@ -1,4 +1,4 @@
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CategoryManager } from "@/components/admin/category-manager";
 import { PageHeader } from "@/components/ui/primitives";
@@ -7,7 +7,7 @@ import type { Category } from "@/types/database";
 export const dynamic = "force-dynamic";
 
 export default async function AdminCategoriesPage() {
-  await requireStaff();
+  await requirePermission("categories");
   const db = createAdminClient();
 
   const [{ data: categories }, { data: counts }] = await Promise.all([

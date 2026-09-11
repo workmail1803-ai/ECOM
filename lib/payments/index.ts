@@ -6,15 +6,35 @@ import { codProvider } from "./cod";
 import { bkashProvider } from "./bkash";
 import { nagadProvider } from "./nagad";
 import { cardProvider } from "./card";
+import { bkashManualProvider, nagadManualProvider } from "./manual";
 
 export type { PaymentProvider, PaymentInitInput, PaymentInitResult } from "./types";
 
+/**
+ * Provider resolution.
+ *
+ * bKash and Nagad each have two implementations: the automated gateway, and
+ * manual verification where the customer transfers the money themselves and
+ * submits proof. We prefer the gateway when its credentials are present and
+ * fall back to manual otherwise.
+ *
+ * The customer sees one "bKash" option either way. Keeping the choice here is
+ * what stops a `if (manual)` branch leaking into checkout — CLAUDE.md rule 5.
+ */
 const ALL_PROVIDERS: Record<string, PaymentProvider> = {
   cod: codProvider,
-  bkash: bkashProvider,
-  nagad: nagadProvider,
+  bkash: bkashProvider.isConfigured() ? bkashProvider : bkashManualProvider,
+  nagad: nagadProvider.isConfigured() ? nagadProvider : nagadManualProvider,
   card: cardProvider,
 };
+
+/** True when this method will go through manual staff verification. */
+export function isManualFlow(id: PaymentMethod): boolean {
+  return (
+    (id === "bkash" && !bkashProvider.isConfigured()) ||
+    (id === "nagad" && !nagadProvider.isConfigured())
+  );
+}
 
 /**
  * Providers the operator has switched on, intersected with the ones that

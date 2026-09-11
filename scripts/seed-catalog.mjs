@@ -201,6 +201,10 @@ async function main() {
   // The 0013 banners advertise phones and laptops; this store sells gadgets and
   // accessories, so --banners replaces them with matching copy.
   if (withBanners) {
+    // 3:4 crop for the tall campaign tiles.
+    const portrait = (id) =>
+      `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=600&h=800&q=80`;
+
     const banners = [
       {
         id: "b1000000-0000-4000-8000-000000000001",
@@ -247,6 +251,79 @@ async function main() {
         cta_href: "/products?category=projector",
         accent_hex: "#B45309",
         priority: 80,
+        is_active: true,
+      },
+
+      // ── Campaign tiles ───────────────────────────────────────────────────
+      // Tall portrait cards with a Bangla headline burned over the artwork.
+      // Every one of these is admin-editable at /admin/banners.
+      //
+      // The photographs are the ones already verified as matching their
+      // subject, re-cropped to 3:4 — `h` alongside `w` makes Unsplash crop to
+      // portrait instead of letterboxing a landscape frame.
+      {
+        id: "c1000000-0000-4000-8000-000000000001",
+        placement: "category_tile",
+        eyebrow: "১০০% অথেন্টিক প্রোডাক্ট",
+        title: "Gaming Zone",
+        subtitle: "Keyboards, mice and headsets",
+        image_url: portrait("1587829741301-dc798b83add3"),
+        cta_label: "Discover",
+        cta_href: "/products?category=gaming-accessories",
+        accent_hex: "#1B4DFF",
+        priority: 50,
+        is_active: true,
+      },
+      {
+        id: "c1000000-0000-4000-8000-000000000002",
+        placement: "category_tile",
+        eyebrow: "বাংলাদেশের সেরা অফার",
+        title: "Audio Paradise",
+        subtitle: "Earbuds and ANC headphones",
+        image_url: portrait("1583394838336-acd977736f90"),
+        cta_label: "Listen",
+        cta_href: "/products?category=earbuds-headphones",
+        accent_hex: "#6D28D9",
+        priority: 45,
+        is_active: true,
+      },
+      {
+        id: "c1000000-0000-4000-8000-000000000003",
+        placement: "category_tile",
+        eyebrow: "লোডশেডিংয়ে চিন্তা নেই",
+        title: "Always Online",
+        subtitle: "Mini UPS for router and ONU",
+        image_url: LOCAL("a70"),
+        cta_label: "Explore",
+        cta_href: "/products?category=mini-ups",
+        accent_hex: "#0F766E",
+        priority: 40,
+        is_active: true,
+      },
+      {
+        id: "c1000000-0000-4000-8000-000000000004",
+        placement: "category_tile",
+        eyebrow: "ঘরেই ১০০ ইঞ্চি পর্দা",
+        title: "Big Screen",
+        subtitle: "Native 1080p projectors",
+        image_url: portrait("1478720568477-152d9b164e26"),
+        cta_label: "View",
+        cta_href: "/products?category=projector",
+        accent_hex: "#B45309",
+        priority: 35,
+        is_active: true,
+      },
+      {
+        id: "c1000000-0000-4000-8000-000000000005",
+        placement: "category_tile",
+        eyebrow: "চার্জ নিয়ে আর ভাবনা নয়",
+        title: "Power Up",
+        subtitle: "Power banks and GaN chargers",
+        image_url: portrait("1583863788434-e58a36330cf0"),
+        cta_label: "Shop",
+        cta_href: "/products?category=power-bank",
+        accent_hex: "#BE123C",
+        priority: 30,
         is_active: true,
       },
     ];

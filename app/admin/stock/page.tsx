@@ -1,4 +1,4 @@
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { StockTable } from "@/components/admin/stock-table";
 import { PageHeader, Card } from "@/components/ui/primitives";
@@ -6,7 +6,7 @@ import { PageHeader, Card } from "@/components/ui/primitives";
 export const dynamic = "force-dynamic";
 
 export default async function AdminStockPage() {
-  await requireStaff();
+  await requirePermission("stock");
   const db = createAdminClient();
 
   const { data } = await db

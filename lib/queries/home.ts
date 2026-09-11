@@ -18,6 +18,7 @@ export interface HomeData {
   heroBanners: Banner[];
   promoStrip: Banner | null;
   offerCards: Banner[];
+  categoryTiles: Banner[];
   featuredCategories: Category[];
   featured: ProductCard[];
   newArrivals: ProductCard[];
@@ -122,6 +123,7 @@ export const getHomeData = cache(async (): Promise<HomeData> => {
     heroBanners: live.filter((b) => b.placement === "hero"),
     promoStrip: live.find((b) => b.placement === "promo_strip") ?? null,
     offerCards: live.filter((b) => b.placement === "offer_card"),
+    categoryTiles: live.filter((b) => b.placement === "category_tile"),
     featuredCategories: (categories.data as Category[]) ?? [],
     featured: (featured.data as unknown as ProductCard[]) ?? [],
     newArrivals: (newArrivals.data as unknown as ProductCard[]) ?? [],

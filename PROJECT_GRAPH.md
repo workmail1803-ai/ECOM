@@ -1,4 +1,4 @@
-# Bidyut Commerce — project graph
+# Nazmul Commerce — project graph
 
 The authoritative map of this codebase. Read this before changing anything;
 `CLAUDE.md` is the short version of the rules below.
@@ -54,6 +54,7 @@ app/
     products/            listing (filters, sort, pagination) + [slug] PDP
     cart/ checkout/      cart, checkout, checkout/failed
     order/confirmed/     post-checkout receipt
+    order/pay/           manual bKash/Nagad proof submission
     track/               guest tracking (order number + phone)
     account/             orders, wishlist, addresses, profile, password
     contact/             support channels
@@ -66,7 +67,7 @@ app/
 
 components/{ui,storefront,product,cart,checkout,account,admin}
 lib/{supabase,payments,pricing,queries,actions,auth,cart,validations,content,utils}
-supabase/migrations/     schema, RLS, functions, seed  (0001 → 0014)
+supabase/migrations/     schema, RLS, functions, seed  (0001 → 0015)
 scripts/                 db-apply, seed-catalog, upload-seed-images, make-admin
 types/database.ts        hand-maintained mirror of the schema
 tests/                   vitest — money, validations
@@ -125,6 +126,19 @@ Business logic lives in `lib/`, never in a page component.
    is only via the SECURITY DEFINER RPCs, which check the httpOnly cookie token.
 10. **Coupons have no public read policy.** Letting anon SELECT `coupons` would
     let anyone enumerate every discount code. Validation is inside `quote_cart()`.
+11. **A manual payment is settled by a person, never by a request.** Only
+    `verify_manual_payment()` can mark a manual transfer successful, it requires
+    the `payments` permission, and it records `verified_by`. The customer
+    submitting a transaction id changes nothing but `pending`.
+12. **`payment-proofs` is the one private bucket.** A payment screenshot shows a
+    wallet balance and a phone number. There is no client write policy at all —
+    uploads go through a server action using the service role, after the
+    order-number + phone pair has been checked. Staff read via 5-minute signed
+    URLs.
+13. **Permissions are checked in SQL, not just in the nav.** `has_permission()`
+    is SECURITY DEFINER over `staff_permissions`. Hiding a nav link is a
+    courtesy; `requirePermission()` on the page and the SQL check in the
+    function are the lock.
 
 ---
 
@@ -135,12 +149,61 @@ Business logic lives in `lib/`, never in a page component.
 Dashboard · Products (CRUD, margin) · Categories · Stock (inline edit) ·
 Orders (status transitions) · Payments · Customers (role assignment) ·
 Coupons · Banners · Reviews (moderation) · Reports (revenue, COGS, margin,
-product performance, payment mix) · Settings (store config + delivery zones).
+product performance, payment mix) · Staff (roles + per-section grants, admin
+only) · Settings (store config + delivery zones, admin only).
 
 Margin and cost of goods are admin-only *because* `cost_paisa` is revoked at
 the column level — the storefront literally cannot read it.
 
 ---
+
+## 5a. Manual bKash / Nagad verification
+
+Bangladeshi merchants overwhelmingly take wallet payments by hand: the customer
+sends money from their own app and quotes the transaction id. That flow is
+first-class here.
+
+```
+checkout (bkash) ──▶ place_order()          payment row, status 'initiated'
+                          │                 is_manual = true
+                          ▼
+                   /order/pay?ref=BD-100123
+                          │  customer enters TRX id, sender number, screenshot
+                          ▼
+               submit_payment_proof()        status 'pending'
+                   order_number + phone      (the same second factor as /track)
+                          │
+                          ▼
+               /admin/payments  ──▶ staff look at the screenshot and the id
+                          │
+              verify_manual_payment()        approve → 'successful' + order
+                requires `payments` perm     confirmed, verified_by recorded
+                                             reject  → 'failed', order stays
+                                                       open so they can resubmit
+```
+
+`lib/payments/index.ts` picks the implementation: bKash and Nagad resolve to the
+**gateway** provider when its credentials are in env, and to the **manual**
+provider otherwise. The customer sees one "bKash" option either way, and no
+`if (manual)` branch leaks into checkout.
+
+To turn it on: apply 0015, then add `bkash` / `nagad` to
+`PAYMENTS_ENABLED_PROVIDERS`, then set the receive numbers at /admin/settings.
+
+## 5b. Staff and permissions
+
+`admin` is unrestricted and cannot be narrowed — someone has to be able to fix a
+lockout. `manager` holds only the sections granted in `staff_permissions`.
+`settings` and `staff` are never grantable, because whoever can grant access can
+grant themselves anything.
+
+Managed at **/admin/staff**: find an existing account by email, pick a role, tick
+sections. `set_staff_access()` writes the role and the grants in one transaction
+and refuses to let an admin change their own access.
+
+Enforcement is three-deep: the nav hides what you cannot use,
+`requirePermission()` guards the page and every action, and `has_permission()`
+re-checks inside SQL.
 
 ## 6. Database RAM discipline (free tier ≈ 1 GB)
 
@@ -184,6 +247,7 @@ Plain SQL in `supabase/migrations/`, applied in filename order, **idempotent**.
 | 0012 | storage buckets and object policies |
 | 0013 | seed: settings, delivery zones, coupons, banners |
 | 0014 | **fix**: `+880…` phone normalisation (see below) |
+| 0015 | manual bKash/Nagad verification + granular staff permissions |
 
 Apply with `node scripts/db-apply.mjs` (needs `SUPABASE_ACCESS_TOKEN`, an
 `sbp_…` management PAT) or paste into the SQL editor.
@@ -220,12 +284,21 @@ a bulk insert requires **identical key sets** across rows.
 variants), homepage, listing + filters, PDP, cart, coupons, checkout, COD
 orders, guest tracking, accounts, full admin, reports.
 
-**Payments**: COD is live. bKash (Tokenized Checkout), Nagad (RSA-signed) and
-card (SSLCOMMERZ) are fully implemented and **hidden** until credentials are
-added to `.env` and the id is listed in `PAYMENTS_ENABLED_PROVIDERS`.
+**Payments**: COD is live. bKash and Nagad each have two implementations — the
+automated gateway (Tokenized Checkout / RSA-signed) and manual staff
+verification — and resolve to whichever is configured. Card (SSLCOMMERZ) is
+gateway-only. All stay **hidden** until listed in `PAYMENTS_ENABLED_PROVIDERS`.
+
+**Homepage campaign tiles**: tall portrait cards with a Bangla headline over the
+artwork, driven by `banners` rows with `placement = 'category_tile'` and fully
+admin-editable. Bengali is set in Noto Sans Bengali, loaded as a second family
+after Inter so mixed-script copy renders each script properly.
 
 **Known gaps**
-- Migration 0014 not applied (see above).
+- Migrations 0014 and 0015 not applied (see above). Until 0015 lands, the manual
+  payment flow and the staff permission editor are inert: `my_permissions()`
+  falls back to the pre-0015 behaviour where every staff member had every
+  section, so the admin panel keeps working unchanged.
 - Product images are placeholders. Real photography replaces them from `/admin`.
 - Email is disabled — `RESEND_API_KEY` is empty, so the app logs instead of
   sending. Order confirmation emails need that key.

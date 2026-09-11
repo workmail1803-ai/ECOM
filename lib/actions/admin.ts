@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireStaff, requireAdmin } from "@/lib/auth/session";
+import { requireStaff, requireAdmin, requirePermission } from "@/lib/auth/session";
 import { takaToPaisa } from "@/lib/utils/money";
 import type { OrderStatus } from "@/types/database";
 
@@ -47,7 +47,7 @@ export async function updateOrderStatus(
   status: OrderStatus,
   note?: string,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("orders");
   // The user-scoped client on purpose: update_order_status() re-checks
   // is_staff() internally, so the caller's identity must reach Postgres.
   const supabase = await createClient();
@@ -77,7 +77,7 @@ export async function saveInternalNote(
   orderId: string,
   note: string,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("orders");
   const db = createAdminClient();
 
   const { error } = await db
@@ -124,7 +124,7 @@ export async function saveProduct(
   _prev: AdminState,
   formData: FormData,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("products");
 
   const raw = Object.fromEntries(formData);
   const parsed = productSchema.safeParse({
@@ -218,7 +218,7 @@ export async function setProductStatus(
   id: string,
   status: "draft" | "active" | "archived",
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("products");
   const db = createAdminClient();
 
   const { error } = await db.from("products").update({ status }).eq("id", id);
@@ -235,7 +235,7 @@ export async function archiveProduct(id: string): Promise<AdminState> {
 }
 
 export async function adjustStock(id: string, stock: number): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("stock");
   if (!Number.isInteger(stock) || stock < 0) {
     return { ok: false, error: "Stock must be a whole number, zero or more." };
   }
@@ -264,7 +264,7 @@ export async function saveCategory(
   _prev: AdminState,
   formData: FormData,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("categories");
   const parsed = categorySchema.safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
@@ -299,7 +299,7 @@ export async function saveCategory(
 }
 
 export async function deleteCategory(id: string): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("categories");
   const db = createAdminClient();
 
   // products.category_id is ON DELETE SET NULL, so the products survive — but
@@ -342,7 +342,7 @@ export async function saveCoupon(
   _prev: AdminState,
   formData: FormData,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("coupons");
   const parsed = couponSchema.safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
@@ -393,7 +393,7 @@ export async function saveCoupon(
 }
 
 export async function toggleCoupon(id: string, active: boolean): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("coupons");
   const db = createAdminClient();
   const { error } = await db.from("coupons").update({ is_active: active }).eq("id", id);
   if (error) return { ok: false, error: "Could not update the coupon." };
@@ -407,7 +407,7 @@ export async function saveBanner(
   _prev: AdminState,
   formData: FormData,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("banners");
 
   const get = (k: string) => String(formData.get(k) ?? "").trim() || null;
   const title = get("title");
@@ -448,7 +448,7 @@ export async function saveBanner(
 }
 
 export async function deleteBanner(id: string): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("banners");
   const db = createAdminClient();
   const { error } = await db.from("banners").delete().eq("id", id);
   if (error) return { ok: false, error: "Could not delete that banner." };
@@ -463,7 +463,7 @@ export async function moderateReview(
   id: string,
   status: "approved" | "rejected",
 ): Promise<AdminState> {
-  const staff = await requireStaff();
+  const staff = await requirePermission("reviews");
   const db = createAdminClient();
 
   // The rollup trigger on reviews keeps products.rating_* in step with this.
@@ -570,7 +570,7 @@ export async function saveDeliveryZone(
   _prev: AdminState,
   formData: FormData,
 ): Promise<AdminState> {
-  await requireStaff();
+  await requirePermission("settings");
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -608,4 +608,119 @@ export async function saveDeliveryZone(
   revalidatePath("/admin/settings");
   revalidatePath("/", "layout");
   return { ok: true, message: "Delivery zone saved." };
+}
+
+// ── Manual payment verification ─────────────────────────────────────────────
+
+/**
+ * Approve or reject a customer-submitted bKash/Nagad transfer.
+ *
+ * The decision itself lives in `verify_manual_payment()`, which re-checks the
+ * caller's permission in SQL and records who decided. Approving settles the
+ * payment and confirms the order; rejecting deliberately leaves the order alive
+ * so the customer can correct a mistyped transaction ID and resubmit.
+ */
+export async function verifyManualPayment(
+  paymentId: string,
+  approve: boolean,
+  reason?: string,
+): Promise<AdminState> {
+  await requirePermission("payments");
+  // User-scoped client on purpose: the function reads auth.uid() to stamp
+  // verified_by, so the caller's identity has to reach Postgres.
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("verify_manual_payment", {
+    p_payment_id: paymentId,
+    p_approve: approve,
+    p_reason: reason ?? null,
+  });
+
+  if (error) {
+    if (error.message.includes("forbidden")) {
+      return { ok: false, error: "You do not have permission to verify payments." };
+    }
+    if (error.message.includes("not_a_manual_payment")) {
+      return { ok: false, error: "That payment is not a manual submission." };
+    }
+    return { ok: false, error: "Could not record that decision." };
+  }
+
+  revalidatePath("/admin/payments");
+  revalidatePath("/admin/orders");
+  return {
+    ok: true,
+    message: approve ? "Payment verified and order confirmed." : "Payment rejected.",
+  };
+}
+
+/**
+ * A short-lived signed URL for a payment screenshot.
+ *
+ * The `payment-proofs` bucket is private — a screenshot shows a wallet balance
+ * and a phone number, so it must never be reachable by URL guessing.
+ */
+export async function getProofUrl(path: string): Promise<string | null> {
+  await requirePermission("payments");
+  const db = createAdminClient();
+
+  const { data } = await db.storage
+    .from("payment-proofs")
+    .createSignedUrl(path, 300); // 5 minutes is plenty to look at one image
+
+  return data?.signedUrl ?? null;
+}
+
+// ── Staff and permissions ───────────────────────────────────────────────────
+
+/**
+ * Set someone's role and, for managers, exactly which admin sections they can
+ * open. Admins are unrestricted by design; customers have no admin surface.
+ *
+ * `set_staff_access()` refuses to let an admin change their own access, because
+ * that is the one mistake with no in-app recovery.
+ */
+export async function setStaffAccess(
+  userId: string,
+  role: "customer" | "manager" | "admin",
+  permissions: string[],
+): Promise<AdminState> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("set_staff_access", {
+    p_user_id: userId,
+    p_role: role,
+    p_permissions: role === "manager" ? permissions : [],
+  });
+
+  if (error) {
+    if (error.message.includes("cannot_change_own_access")) {
+      return { ok: false, error: "You cannot change your own access." };
+    }
+    if (error.message.includes("forbidden")) {
+      return { ok: false, error: "Only a full admin can manage staff." };
+    }
+    return { ok: false, error: "Could not update that account." };
+  }
+
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/customers");
+  return { ok: true, message: "Access updated." };
+}
+
+/** Look an account up by email so an admin can promote it to staff. */
+export async function findAccountByEmail(
+  email: string,
+): Promise<{ id: string; email: string | null; full_name: string | null } | null> {
+  await requireAdmin();
+  const db = createAdminClient();
+
+  const { data } = await db
+    .from("profiles")
+    .select("id, email, full_name")
+    .ilike("email", email.trim())
+    .maybeSingle<{ id: string; email: string | null; full_name: string | null }>();
+
+  return data ?? null;
 }

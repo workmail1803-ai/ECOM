@@ -1,4 +1,4 @@
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BannerManager } from "@/components/admin/banner-manager";
 import { PageHeader } from "@/components/ui/primitives";
@@ -7,7 +7,7 @@ import type { Banner } from "@/types/database";
 export const dynamic = "force-dynamic";
 
 export default async function AdminBannersPage() {
-  await requireStaff();
+  await requirePermission("banners");
   const db = createAdminClient();
 
   const { data } = await db

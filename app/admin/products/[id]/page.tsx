@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProductForm } from "@/components/admin/product-form";
 import { PageHeader } from "@/components/ui/primitives";
@@ -16,7 +16,7 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireStaff();
+  await requirePermission("products");
   const db = createAdminClient();
 
   // Service role, so `cost_paisa` comes back — it is revoked for both client

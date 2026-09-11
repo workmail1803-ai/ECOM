@@ -18,60 +18,86 @@ import {
   Menu,
   X,
   CreditCard,
+  ShieldCheck,
 } from "lucide-react";
-import type { AppRole } from "@/types/database";
+import type { AdminPermission } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils/cn";
 
-/** `adminOnly` items are hidden from managers — the RLS policies agree. */
+/**
+ * Every link declares the permission it needs. The nav then renders only what
+ * this account can actually open.
+ *
+ * This is presentation, not enforcement: each page calls requirePermission()
+ * and each SQL function re-checks has_permission(). Hiding a link the user
+ * cannot use is a courtesy, not a lock.
+ */
 const SECTIONS: {
   title: string;
-  links: { href: string; label: string; icon: typeof Package; adminOnly?: boolean }[];
+  links: {
+    href: string;
+    label: string;
+    icon: typeof Package;
+    permission?: AdminPermission;
+  }[];
 }[] = [
   {
     title: "Overview",
+    // The dashboard is the landing page for anyone with admin access at all.
     links: [{ href: "/admin", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
     title: "Catalog",
     links: [
-      { href: "/admin/products", label: "Products", icon: Package },
-      { href: "/admin/categories", label: "Categories", icon: FolderTree },
-      { href: "/admin/stock", label: "Stock", icon: Truck },
+      { href: "/admin/products", label: "Products", icon: Package, permission: "products" },
+      { href: "/admin/categories", label: "Categories", icon: FolderTree, permission: "categories" },
+      { href: "/admin/stock", label: "Stock", icon: Truck, permission: "stock" },
     ],
   },
   {
     title: "Sales",
     links: [
-      { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-      { href: "/admin/payments", label: "Payments", icon: CreditCard },
-      { href: "/admin/customers", label: "Customers", icon: Users },
+      { href: "/admin/orders", label: "Orders", icon: ShoppingBag, permission: "orders" },
+      { href: "/admin/payments", label: "Payments", icon: CreditCard, permission: "payments" },
+      { href: "/admin/customers", label: "Customers", icon: Users, permission: "customers" },
     ],
   },
   {
     title: "Marketing",
     links: [
-      { href: "/admin/coupons", label: "Coupons", icon: Ticket },
-      { href: "/admin/banners", label: "Banners", icon: ImageIcon },
-      { href: "/admin/reviews", label: "Reviews", icon: Star },
+      { href: "/admin/coupons", label: "Coupons", icon: Ticket, permission: "coupons" },
+      { href: "/admin/banners", label: "Banners", icon: ImageIcon, permission: "banners" },
+      { href: "/admin/reviews", label: "Reviews", icon: Star, permission: "reviews" },
     ],
   },
   {
     title: "Insight",
     links: [
-      { href: "/admin/reports", label: "Reports", icon: BarChart3 },
-      { href: "/admin/settings", label: "Settings", icon: Settings, adminOnly: true },
+      { href: "/admin/reports", label: "Reports", icon: BarChart3, permission: "reports" },
+      { href: "/admin/staff", label: "Staff", icon: ShieldCheck, permission: "staff" },
+      { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings" },
     ],
   },
 ];
 
-export function AdminNav({ role }: { role: AppRole }) {
+export function AdminNav({
+  permissions,
+  storeName,
+  pendingPayments = 0,
+}: {
+  permissions: AdminPermission[];
+  storeName: string;
+  /** Manual transfers awaiting a decision — worth a badge, it blocks dispatch. */
+  pendingPayments?: number;
+}) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+
+  const allowed = (p?: AdminPermission) => !p || permissions.includes(p);
 
   const nav = (
     <nav className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2 border-b border-line px-4">
-        <span className="text-lg font-bold tracking-tight text-ink">Nazmul</span>
+        <span className="text-lg font-bold tracking-tight text-ink">{storeName}</span>
         <span className="rounded bg-ink px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">
           Admin
         </span>
@@ -79,9 +105,7 @@ export function AdminNav({ role }: { role: AppRole }) {
 
       <div className="flex-1 overflow-y-auto p-3">
         {SECTIONS.map((section) => {
-          const links = section.links.filter(
-            (l) => !l.adminOnly || role === "admin",
-          );
+          const links = section.links.filter((l) => allowed(l.permission));
           if (links.length === 0) return null;
 
           return (
@@ -94,6 +118,8 @@ export function AdminNav({ role }: { role: AppRole }) {
                   l.href === "/admin"
                     ? pathname === "/admin"
                     : pathname.startsWith(l.href);
+                const badge = l.href === "/admin/payments" ? pendingPayments : 0;
+
                 return (
                   <Link
                     key={l.href}
@@ -109,6 +135,11 @@ export function AdminNav({ role }: { role: AppRole }) {
                   >
                     <l.icon size={16} />
                     {l.label}
+                    {badge > 0 ? (
+                      <span className="ml-auto rounded-full bg-warning px-1.5 text-[10px] font-bold tabular text-white">
+                        {badge}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -137,7 +168,7 @@ export function AdminNav({ role }: { role: AppRole }) {
             aria-label="Close menu"
             tabIndex={-1}
           />
-          <div className="absolute left-0 top-0 h-full w-72 bg-surface shadow-pop">
+          <div className="absolute inset-y-0 left-0 w-72 bg-surface shadow-pop">
             <button
               onClick={() => setOpen(false)}
               className="absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-lg hover:bg-surface-sunken"

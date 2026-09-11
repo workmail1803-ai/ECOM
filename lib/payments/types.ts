@@ -25,6 +25,11 @@ export type PaymentInitResult =
   | { kind: "settled"; message: string }
   /** Online: send the customer to the gateway. */
   | { kind: "redirect"; url: string; providerRef: string }
+  /**
+   * Manual wallet transfer: send the customer to our own page to submit a
+   * transaction id and a screenshot for a human to verify.
+   */
+  | { kind: "manual"; submitPath: string }
   | { kind: "error"; message: string };
 
 export interface PaymentProvider {

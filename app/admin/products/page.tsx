@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Plus, Pencil, Package } from "lucide-react";
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader, Card, Badge, EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ export default async function AdminProductsPage({
 }: {
   searchParams: Promise<{ q?: string; status?: string }>;
 }) {
-  await requireStaff();
+  await requirePermission("products");
   const { q, status } = await searchParams;
 
   const db = createAdminClient();

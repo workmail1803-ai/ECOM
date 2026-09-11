@@ -1,4 +1,4 @@
-import { requireStaff } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CouponManager } from "@/components/admin/coupon-manager";
 import { PageHeader } from "@/components/ui/primitives";
@@ -7,7 +7,7 @@ import type { Coupon } from "@/types/database";
 export const dynamic = "force-dynamic";
 
 export default async function AdminCouponsPage() {
-  await requireStaff();
+  await requirePermission("coupons");
   const db = createAdminClient();
 
   const { data } = await db

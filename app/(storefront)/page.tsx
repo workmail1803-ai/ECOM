@@ -5,6 +5,7 @@ import { getStoreSettings } from "@/lib/queries/settings";
 import { createClient } from "@/lib/supabase/server";
 import { Hero } from "@/components/storefront/hero";
 import { FlashSaleSection } from "@/components/storefront/flash-sale";
+import { PromoTiles } from "@/components/storefront/promo-tiles";
 import {
   Section,
   ProductGrid,
@@ -107,6 +108,15 @@ export default async function HomePage() {
           href="/products"
         >
           <CategoryGrid categories={home.featuredCategories} />
+        </Section>
+      ) : null}
+
+      {home.categoryTiles.length > 0 ? (
+        <Section
+          title="Featured collections"
+          subtitle="Curated picks, refreshed as new stock lands."
+        >
+          <PromoTiles banners={home.categoryTiles} />
         </Section>
       ) : null}
 
