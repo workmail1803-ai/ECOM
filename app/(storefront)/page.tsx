@@ -3,9 +3,8 @@ import { Truck, ShieldCheck, MessageCircle, ArrowRight } from "lucide-react";
 import { getHomeData } from "@/lib/queries/home";
 import { getStoreSettings } from "@/lib/queries/settings";
 import { createClient } from "@/lib/supabase/server";
-import { Hero } from "@/components/storefront/hero";
+import { HeroCards } from "@/components/storefront/hero-cards";
 import { FlashSaleSection } from "@/components/storefront/flash-sale";
-import { PromoTiles } from "@/components/storefront/promo-tiles";
 import {
   Section,
   ProductGrid,
@@ -82,7 +81,10 @@ export default async function HomePage() {
 
   return (
     <>
-      <Hero banners={home.heroBanners} />
+      <HeroCards
+        banners={[...home.heroBanners, ...home.categoryTiles]}
+        heading={`${settings.store_name} — ${settings.store_tagline}`}
+      />
 
       {home.promoStrip ? (
         <div className="bg-ink text-white">
@@ -108,15 +110,6 @@ export default async function HomePage() {
           href="/products"
         >
           <CategoryGrid categories={home.featuredCategories} />
-        </Section>
-      ) : null}
-
-      {home.categoryTiles.length > 0 ? (
-        <Section
-          title="Featured collections"
-          subtitle="Curated picks, refreshed as new stock lands."
-        >
-          <PromoTiles banners={home.categoryTiles} />
         </Section>
       ) : null}
 

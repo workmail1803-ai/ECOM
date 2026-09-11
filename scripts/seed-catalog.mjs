@@ -202,106 +202,60 @@ async function main() {
   // accessories, so --banners replaces them with matching copy.
   if (withBanners) {
     // 3:4 crop for the tall campaign tiles.
-    const portrait = (id) =>
-      `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=600&h=800&q=80`;
+    const portrait = (id, w = 600, h = 800) =>
+      `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
 
     const banners = [
+      // ── Hero campaign cards ───────────────────────────────────────────────
+      // Seven on purpose: the lead card spans two columns, so 1 + 6 fills a
+      // 4-across grid in exactly two rows with no orphan card on the last row.
+      //
+      // Photographs are the ones verified as matching their subject, re-cropped
+      // to 3:4 — passing `h` alongside `w` makes Unsplash crop to portrait
+      // rather than letterbox a landscape frame.
       {
         id: "b1000000-0000-4000-8000-000000000001",
         placement: "hero",
-        eyebrow: "Audio",
-        title: "Earbuds that survive the commute",
+        eyebrow: "বাংলাদেশের সেরা অফার",
+        title: "Audio Paradise",
         subtitle:
-          "Hybrid ANC from ৳1,390. Every pair carries a real warranty you can claim in Dhaka.",
-        image_url: IMG("1505740420928-5e560c06d30e", 1600),
-        mobile_image_url: IMG("1505740420928-5e560c06d30e", 800),
-        cta_label: "Shop earbuds",
+          "Hybrid ANC earbuds and headphones from Tk 1,390, every pair with a warranty you can actually claim in Dhaka.",
+        image_url: portrait("1583394838336-acd977736f90", 1200, 900),
+        mobile_image_url: portrait("1583394838336-acd977736f90", 800, 600),
+        cta_label: "Shop audio",
         cta_href: "/products?category=earbuds-headphones",
-        secondary_cta_label: "Compare ANC",
-        secondary_cta_href: "/products?category=earbuds-headphones&sort=price_desc",
-        accent_hex: "#1B4DFF",
+        accent_hex: "#6D28D9",
         priority: 100,
         is_active: true,
       },
       {
         id: "b1000000-0000-4000-8000-000000000002",
         placement: "hero",
-        eyebrow: "Load shedding",
-        title: "Your router does not have to go dark",
-        subtitle:
-          "Mini UPS units that keep the router and ONU running 6–8 hours. Switchover in under 10ms.",
-        image_url: LOCAL("a70"),
-        mobile_image_url: LOCAL("a70"),
-        cta_label: "Shop mini UPS",
-        cta_href: "/products?category=mini-ups",
-        accent_hex: "#0F766E",
+        eyebrow: "১০০% অথেন্টিক প্রোডাক্ট",
+        title: "Gaming Zone",
+        subtitle: "Mechanical keyboards, mice and headsets",
+        image_url: portrait("1587829741301-dc798b83add3"),
+        cta_label: "Discover",
+        cta_href: "/products?category=gaming-accessories",
+        accent_hex: "#1B4DFF",
         priority: 90,
         is_active: true,
       },
       {
         id: "b1000000-0000-4000-8000-000000000003",
         placement: "hero",
-        eyebrow: "Big screen",
-        title: "A 100-inch picture for less than a TV",
-        subtitle:
-          "Native 1080p projectors with auto keystone. Set up in under a minute.",
-        image_url: IMG("1478720568477-152d9b164e26", 1600),
-        mobile_image_url: IMG("1478720568477-152d9b164e26", 800),
-        cta_label: "Shop projectors",
-        cta_href: "/products?category=projector",
-        accent_hex: "#B45309",
-        priority: 80,
-        is_active: true,
-      },
-
-      // ── Campaign tiles ───────────────────────────────────────────────────
-      // Tall portrait cards with a Bangla headline burned over the artwork.
-      // Every one of these is admin-editable at /admin/banners.
-      //
-      // The photographs are the ones already verified as matching their
-      // subject, re-cropped to 3:4 — `h` alongside `w` makes Unsplash crop to
-      // portrait instead of letterboxing a landscape frame.
-      {
-        id: "c1000000-0000-4000-8000-000000000001",
-        placement: "category_tile",
-        eyebrow: "১০০% অথেন্টিক প্রোডাক্ট",
-        title: "Gaming Zone",
-        subtitle: "Keyboards, mice and headsets",
-        image_url: portrait("1587829741301-dc798b83add3"),
-        cta_label: "Discover",
-        cta_href: "/products?category=gaming-accessories",
-        accent_hex: "#1B4DFF",
-        priority: 50,
-        is_active: true,
-      },
-      {
-        id: "c1000000-0000-4000-8000-000000000002",
-        placement: "category_tile",
-        eyebrow: "বাংলাদেশের সেরা অফার",
-        title: "Audio Paradise",
-        subtitle: "Earbuds and ANC headphones",
-        image_url: portrait("1583394838336-acd977736f90"),
-        cta_label: "Listen",
-        cta_href: "/products?category=earbuds-headphones",
-        accent_hex: "#6D28D9",
-        priority: 45,
-        is_active: true,
-      },
-      {
-        id: "c1000000-0000-4000-8000-000000000003",
-        placement: "category_tile",
         eyebrow: "লোডশেডিংয়ে চিন্তা নেই",
         title: "Always Online",
-        subtitle: "Mini UPS for router and ONU",
-        image_url: LOCAL("a70"),
+        subtitle: "Mini UPS for your router and ONU",
+        image_url: portrait("1558002038-1055907df827"),
         cta_label: "Explore",
         cta_href: "/products?category=mini-ups",
         accent_hex: "#0F766E",
-        priority: 40,
+        priority: 80,
         is_active: true,
       },
       {
-        id: "c1000000-0000-4000-8000-000000000004",
+        id: "c1000000-0000-4000-8000-000000000001",
         placement: "category_tile",
         eyebrow: "ঘরেই ১০০ ইঞ্চি পর্দা",
         title: "Big Screen",
@@ -310,11 +264,11 @@ async function main() {
         cta_label: "View",
         cta_href: "/products?category=projector",
         accent_hex: "#B45309",
-        priority: 35,
+        priority: 50,
         is_active: true,
       },
       {
-        id: "c1000000-0000-4000-8000-000000000005",
+        id: "c1000000-0000-4000-8000-000000000002",
         placement: "category_tile",
         eyebrow: "চার্জ নিয়ে আর ভাবনা নয়",
         title: "Power Up",
@@ -323,8 +277,43 @@ async function main() {
         cta_label: "Shop",
         cta_href: "/products?category=power-bank",
         accent_hex: "#BE123C",
-        priority: 30,
+        priority: 45,
         is_active: true,
+      },
+      {
+        id: "c1000000-0000-4000-8000-000000000003",
+        placement: "category_tile",
+        eyebrow: "স্মার্ট গ্যাজেটের ঠিকানা",
+        title: "Smart Living",
+        subtitle: "Watches, bands and smart plugs",
+        image_url: portrait("1523275335684-37898b6baf30"),
+        cta_label: "Browse",
+        cta_href: "/products?category=smart-gadgets",
+        accent_hex: "#0369A1",
+        priority: 40,
+        is_active: true,
+      },
+      {
+        id: "c1000000-0000-4000-8000-000000000004",
+        placement: "category_tile",
+        eyebrow: "সেরা সাউন্ড কোয়ালিটি",
+        title: "True Wireless",
+        subtitle: "TWS earbuds with real ANC",
+        image_url: portrait("1590658268037-6bf12165a8df"),
+        cta_label: "Listen",
+        cta_href: "/products?category=earbuds-headphones",
+        accent_hex: "#4338CA",
+        priority: 35,
+        is_active: true,
+      },
+      // Retired: the old fifth tile and the promo/offer copy that the card
+      // layout replaced. Kept as rows so re-running does not resurrect them.
+      {
+        id: "c1000000-0000-4000-8000-000000000005",
+        placement: "category_tile",
+        title: "Retired tile",
+        is_active: false,
+        priority: 0,
       },
     ];
 
@@ -342,7 +331,9 @@ async function main() {
   // ── Flash sale (opt-in) ───────────────────────────────────────────────────
   if (withFlash) {
     const now = new Date();
-    const ends = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    // Two weeks, not three days: a demo sale that quietly expires over a
+    // weekend looks like the section is broken.
+    const ends = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
     const [sale] = await upsert(
       "flash_sales",
@@ -350,7 +341,7 @@ async function main() {
         {
           id: "f1000000-0000-4000-8000-000000000001",
           title: "Weekend flash sale",
-          subtitle: "Three days only, while stock lasts.",
+          subtitle: "Limited stock at these prices.",
           starts_at: new Date(now.getTime() - 60_000).toISOString(),
           ends_at: ends.toISOString(),
           is_active: true,
