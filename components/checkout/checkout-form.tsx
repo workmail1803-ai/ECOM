@@ -238,96 +238,6 @@ export function CheckoutForm({
               />
             </Field>
 
-            <div className="sm:col-span-2">
-              <p className="mb-1.5 text-sm font-medium text-ink">
-                Delivery <span className="text-danger">*</span>
-              </p>
-
-              <div className="grid gap-2 sm:grid-cols-3">
-                {deliveryOptions.map((o) => {
-                  const st = styleFor(o.slug);
-                  const Icon = st.icon;
-                  const active = zoneSlug === o.slug;
-
-                  return (
-                    <button
-                      key={o.slug}
-                      type="button"
-                      onClick={() => setZoneSlug(o.slug)}
-                      aria-pressed={active}
-                      className={`rounded-xl border p-3 text-left transition-colors ${
-                        active
-                          ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600/20"
-                          : "border-line bg-surface hover:border-line-strong"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-lg ${st.tint} ${st.text}`}
-                        >
-                          <Icon size={15} />
-                        </span>
-                        <span className="text-sm font-semibold text-ink">
-                          {o.name}
-                        </span>
-                      </span>
-                      <span
-                        className={`mt-2 block text-lg font-bold tabular tracking-tight ${
-                          o.feePaisa === 0 ? "text-success" : "text-ink"
-                        }`}
-                      >
-                        {o.feePaisa === 0 ? "Free" : formatTaka(o.feePaisa)}
-                      </span>
-                      <span className="block text-[11px] text-ink-muted">
-                        {etaLabel(o)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* The server still receives a district; the choice above just
-                  decides what it is, instead of making the customer find
-                  their own in a list of 64. */}
-              <input type="hidden" name="district" value={district} />
-
-              {state.fieldErrors?.district ? (
-                <p role="alert" className="mt-1.5 text-xs text-danger">
-                  {state.fieldErrors.district}
-                </p>
-              ) : null}
-
-              {zoneSlug === "outside-dhaka" ? (
-                <div className="mt-3">
-                  <label
-                    htmlFor="outside-city"
-                    className="mb-1 block text-sm font-medium text-ink"
-                  >
-                    Your city or district <span className="text-danger">*</span>
-                  </label>
-                  <Input
-                    id="outside-city"
-                    required
-                    value={outsideCity}
-                    onChange={(e) => setOutsideCity(e.target.value)}
-                    placeholder="e.g. Sylhet"
-                    invalid={Boolean(state.fieldErrors?.district)}
-                  />
-                  <p className="mt-1 text-xs text-ink-muted">
-                    The charge is the same anywhere outside Dhaka — this is only
-                    so the courier knows where to go.
-                  </p>
-                </div>
-              ) : null}
-
-              {isPickup ? (
-                <p className="mt-3 rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-xs leading-5 text-success">
-                  Collect from {showroomAddress}. We will call you when it is
-                  ready — no delivery address needed.
-                </p>
-              ) : null}
-            </div>
-
             {/*
               A collection needs no delivery address, and leaving four required
               address fields on screen next to "no delivery address needed"
@@ -426,6 +336,100 @@ export function CheckoutForm({
               Save this address for next time
             </label>
           ) : null}
+        </section>
+
+        {/*
+          Its own box, directly above payment, rather than a field in the
+          middle of the address form: how the order travels and how it is paid
+          for are one decision made together, and the delivery choice also
+          governs whether an address is needed at all.
+        */}
+        <section className="rounded-xl border border-line bg-surface p-5">
+          <h2 className="text-base font-semibold text-ink">Delivery</h2>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {deliveryOptions.map((o) => {
+                const st = styleFor(o.slug);
+                const Icon = st.icon;
+                const active = zoneSlug === o.slug;
+
+                return (
+                  <button
+                    key={o.slug}
+                    type="button"
+                    onClick={() => setZoneSlug(o.slug)}
+                    aria-pressed={active}
+                    className={`rounded-xl border p-3 text-left transition-colors ${
+                      active
+                        ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600/20"
+                        : "border-line bg-surface hover:border-line-strong"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex size-7 shrink-0 items-center justify-center rounded-lg ${st.tint} ${st.text}`}
+                      >
+                        <Icon size={15} />
+                      </span>
+                      <span className="text-sm font-semibold text-ink">
+                        {o.name}
+                      </span>
+                    </span>
+                    <span
+                      className={`mt-2 block text-lg font-bold tabular tracking-tight ${
+                        o.feePaisa === 0 ? "text-success" : "text-ink"
+                      }`}
+                    >
+                      {o.feePaisa === 0 ? "Free" : formatTaka(o.feePaisa)}
+                    </span>
+                    <span className="block text-[11px] text-ink-muted">
+                      {etaLabel(o)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* The server still receives a district; the choice above just
+                decides what it is, instead of making the customer find
+                their own in a list of 64. */}
+            <input type="hidden" name="district" value={district} />
+
+            {state.fieldErrors?.district ? (
+              <p role="alert" className="mt-1.5 text-xs text-danger">
+                {state.fieldErrors.district}
+              </p>
+            ) : null}
+
+            {zoneSlug === "outside-dhaka" ? (
+              <div className="mt-3">
+                <label
+                  htmlFor="outside-city"
+                  className="mb-1 block text-sm font-medium text-ink"
+                >
+                  Your city or district <span className="text-danger">*</span>
+                </label>
+                <Input
+                  id="outside-city"
+                  required
+                  value={outsideCity}
+                  onChange={(e) => setOutsideCity(e.target.value)}
+                  placeholder="e.g. Sylhet"
+                  invalid={Boolean(state.fieldErrors?.district)}
+                />
+                <p className="mt-1 text-xs text-ink-muted">
+                  The charge is the same anywhere outside Dhaka — this is only
+                  so the courier knows where to go.
+                </p>
+              </div>
+            ) : null}
+
+            {isPickup ? (
+              <p className="mt-3 rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-xs leading-5 text-success">
+                Collect from {showroomAddress}. We will call you when it is
+                ready — no delivery address needed.
+              </p>
+            ) : null}
         </section>
 
         <section className="rounded-xl border border-line bg-surface p-5">
