@@ -15,6 +15,11 @@ import { formatTaka } from "@/lib/utils/money";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Select, Field } from "@/components/ui/field";
 import { cn } from "@/lib/utils/cn";
+import {
+  etaLabel,
+  styleFor,
+  type DeliveryOption,
+} from "@/components/checkout/delivery-options";
 
 const initial: CheckoutState = { ok: false };
 
@@ -38,6 +43,8 @@ export function CheckoutForm({
   defaultPhone,
   defaultEmail,
   codAdvanceThresholdPaisa,
+  deliveryOptions,
+  showroomAddress,
 }: {
   initialQuote: CartQuote;
   addresses: Address[];
@@ -47,12 +54,36 @@ export function CheckoutForm({
   defaultPhone: string;
   defaultEmail: string;
   codAdvanceThresholdPaisa: number;
+  deliveryOptions: DeliveryOption[];
+  /** Used as the address of record when the customer collects in person. */
+  showroomAddress: string;
 }) {
   const [state, action, pending] = useActionState(placeOrder, initial);
 
   const preset = addresses.find((a) => a.is_default) ?? addresses[0] ?? null;
   const [addressId, setAddressId] = useState<string>(preset?.id ?? "");
-  const [district, setDistrict] = useState(preset?.district ?? "");
+  /*
+   * The 64-district dropdown is gone. Delivery is three options, and the only
+   * one that still needs a place name typed is Outside Dhaka — the other two
+   * are fully determined by the choice itself.
+   */
+  const [zoneSlug, setZoneSlug] = useState<string>(
+    preset?.district === "Dhaka" ? "inside-dhaka" : deliveryOptions[0]?.slug ?? "",
+  );
+  const [outsideCity, setOutsideCity] = useState(
+    preset && preset.district !== "Dhaka" ? preset.district : "",
+  );
+
+  // What actually goes to the server as `district`, and what the zone
+  // resolver matches on.
+  const district =
+    zoneSlug === "office-pickup"
+      ? "Office Pickup"
+      : zoneSlug === "inside-dhaka"
+        ? "Dhaka"
+        : outsideCity.trim();
+
+  const isPickup = zoneSlug === "office-pickup";
   const [quote, setQuote] = useState(initialQuote);
   const [method, setMethod] = useState<string>(paymentOptions[0]?.id ?? "cod");
   const [, startQuote] = useTransition();
@@ -61,10 +92,13 @@ export function CheckoutForm({
   useEffect(() => {
     if (!district) return;
     startQuote(async () => {
-      const next = await quoteForDistrict(district);
+      // The payment method is included because delivery is discounted on
+      // prepaid; quoting without it would show a cash-on-delivery fee to
+      // someone who has already chosen bKash.
+      const next = await quoteForDistrict(district, method as never);
       if (next.cart_id) setQuote(next);
     });
-  }, [district]);
+  }, [district, method]);
 
   const usingSaved = Boolean(addressId);
   const saved = addresses.find((a) => a.id === addressId) ?? null;
@@ -94,7 +128,14 @@ export function CheckoutForm({
                     checked={addressId === a.id}
                     onChange={() => {
                       setAddressId(a.id);
-                      setDistrict(a.district);
+                      // A saved address is either Dhaka or it is not; there is
+                      // no third case now that pricing has three options.
+                      if (a.district === "Dhaka") {
+                        setZoneSlug("inside-dhaka");
+                      } else {
+                        setZoneSlug("outside-dhaka");
+                        setOutsideCity(a.district);
+                      }
                     }}
                     className="mt-1 accent-brand-600"
                   />
@@ -122,7 +163,6 @@ export function CheckoutForm({
                   checked={!addressId}
                   onChange={() => {
                     setAddressId("");
-                    setDistrict("");
                   }}
                   className="mt-1 accent-brand-600"
                 />
@@ -198,29 +238,111 @@ export function CheckoutForm({
               />
             </Field>
 
-            <Field
-              label="District"
-              htmlFor="district"
-              required
-              error={state.fieldErrors?.district}
-            >
-              <Select
-                id="district"
-                name="district"
-                required
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                invalid={Boolean(state.fieldErrors?.district)}
-              >
-                <option value="">Select a district</option>
-                {BD_DISTRICTS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-sm font-medium text-ink">
+                Delivery <span className="text-danger">*</span>
+              </p>
 
+              <div className="grid gap-2 sm:grid-cols-3">
+                {deliveryOptions.map((o) => {
+                  const st = styleFor(o.slug);
+                  const Icon = st.icon;
+                  const active = zoneSlug === o.slug;
+
+                  return (
+                    <button
+                      key={o.slug}
+                      type="button"
+                      onClick={() => setZoneSlug(o.slug)}
+                      aria-pressed={active}
+                      className={`rounded-xl border p-3 text-left transition-colors ${
+                        active
+                          ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600/20"
+                          : "border-line bg-surface hover:border-line-strong"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex size-7 shrink-0 items-center justify-center rounded-lg ${st.tint} ${st.text}`}
+                        >
+                          <Icon size={15} />
+                        </span>
+                        <span className="text-sm font-semibold text-ink">
+                          {o.name}
+                        </span>
+                      </span>
+                      <span
+                        className={`mt-2 block text-lg font-bold tabular tracking-tight ${
+                          o.feePaisa === 0 ? "text-success" : "text-ink"
+                        }`}
+                      >
+                        {o.feePaisa === 0 ? "Free" : formatTaka(o.feePaisa)}
+                      </span>
+                      <span className="block text-[11px] text-ink-muted">
+                        {etaLabel(o)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* The server still receives a district; the choice above just
+                  decides what it is, instead of making the customer find
+                  their own in a list of 64. */}
+              <input type="hidden" name="district" value={district} />
+
+              {state.fieldErrors?.district ? (
+                <p role="alert" className="mt-1.5 text-xs text-danger">
+                  {state.fieldErrors.district}
+                </p>
+              ) : null}
+
+              {zoneSlug === "outside-dhaka" ? (
+                <div className="mt-3">
+                  <label
+                    htmlFor="outside-city"
+                    className="mb-1 block text-sm font-medium text-ink"
+                  >
+                    Your city or district <span className="text-danger">*</span>
+                  </label>
+                  <Input
+                    id="outside-city"
+                    required
+                    value={outsideCity}
+                    onChange={(e) => setOutsideCity(e.target.value)}
+                    placeholder="e.g. Sylhet"
+                    invalid={Boolean(state.fieldErrors?.district)}
+                  />
+                  <p className="mt-1 text-xs text-ink-muted">
+                    The charge is the same anywhere outside Dhaka — this is only
+                    so the courier knows where to go.
+                  </p>
+                </div>
+              ) : null}
+
+              {isPickup ? (
+                <p className="mt-3 rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-xs leading-5 text-success">
+                  Collect from {showroomAddress}. We will call you when it is
+                  ready — no delivery address needed.
+                </p>
+              ) : null}
+            </div>
+
+            {/*
+              A collection needs no delivery address, and leaving four required
+              address fields on screen next to "no delivery address needed"
+              would be a contradiction the customer has to resolve. The server
+              schema still requires area and street, so the showroom is
+              submitted as the address of record — which is also the truthful
+              answer to "where did this order go".
+            */}
+            {isPickup ? (
+              <>
+                <input type="hidden" name="area" value="Office Pickup" />
+                <input type="hidden" name="street" value={showroomAddress} />
+              </>
+            ) : (
+              <>
             <Field
               label="Area / thana"
               htmlFor="area"
@@ -275,6 +397,8 @@ export function CheckoutForm({
                 placeholder="Beside the mosque"
               />
             </Field>
+              </>
+            )}
 
             <Field
               label="Order note"

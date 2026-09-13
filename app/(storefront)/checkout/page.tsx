@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { paymentOptions } from "@/lib/payments";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import type { Address } from "@/types/database";
+import { getDeliveryOptions } from "@/lib/queries/delivery";
 
 export const metadata: Metadata = { title: "Checkout", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -19,7 +20,11 @@ export default async function CheckoutPage() {
   if (quote.lines.length === 0) redirect("/cart");
   if (quote.has_blocking_issue) redirect("/cart");
 
-  const [user, settings] = await Promise.all([getSessionUser(), getStoreSettings()]);
+  const [user, settings, deliveryOptions] = await Promise.all([
+    getSessionUser(),
+    getStoreSettings(),
+    getDeliveryOptions(),
+  ]);
 
   let addresses: Address[] = [];
   if (user) {
@@ -37,8 +42,8 @@ export default async function CheckoutPage() {
     <div className="mx-auto max-w-7xl px-4 py-8">
       <h1 className="text-2xl font-bold tracking-tight text-ink">Checkout</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        Delivery charges are calculated from your district. Nothing is charged until
-        you place the order.
+        Pick how you want it delivered. Nothing is charged until you place the
+        order.
       </p>
 
       <CheckoutForm
@@ -50,6 +55,8 @@ export default async function CheckoutPage() {
         defaultPhone={user?.profile?.phone ?? ""}
         defaultEmail={user?.email ?? ""}
         codAdvanceThresholdPaisa={settings.cod_advance_threshold_paisa}
+        deliveryOptions={deliveryOptions}
+        showroomAddress={settings.showroom_address}
       />
     </div>
   );

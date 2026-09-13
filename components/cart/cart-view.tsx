@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { Badge } from "@/components/ui/primitives";
 import { formatTaka } from "@/lib/utils/money";
-import { DeliveryEstimator } from "./delivery-estimator";
+import { DeliveryPicker } from "./delivery-picker";
+import type { DeliveryOption } from "@/components/checkout/delivery-options";
 
 /**
  * The cart.
@@ -28,7 +29,13 @@ import { DeliveryEstimator } from "./delivery-estimator";
  * the subtotal, not the discount. When a mutation returns, it swaps in the
  * fresh quote wholesale.
  */
-export function CartView({ initialQuote }: { initialQuote: CartQuote }) {
+export function CartView({
+  initialQuote,
+  deliveryOptions,
+}: {
+  initialQuote: CartQuote;
+  deliveryOptions: DeliveryOption[];
+}) {
   const [quote, setQuote] = useState(initialQuote);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -269,7 +276,7 @@ export function CartView({ initialQuote }: { initialQuote: CartQuote }) {
             </div>
           </dl>
 
-          <DeliveryEstimator subtotalPaisa={quote.subtotal_paisa} />
+          <DeliveryPicker options={deliveryOptions} />
 
           {quote.has_blocking_issue ? (
             <p className="mt-4 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-xs font-medium text-danger">

@@ -8,7 +8,9 @@ import {
   getProductReviews,
   averageRating,
 } from "@/lib/queries/catalog";
-import { getStoreSettings, getDeliveryZones } from "@/lib/queries/settings";
+import { getStoreSettings } from "@/lib/queries/settings";
+import { getDeliveryOptions } from "@/lib/queries/delivery";
+import { DeliveryOptionCards } from "@/components/checkout/delivery-options";
 import { getSessionUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { Gallery } from "@/components/product/gallery";
@@ -51,11 +53,11 @@ export default async function ProductPage({
 
   if (!product || product.status !== "active") notFound();
 
-  const [related, reviews, settings, zones, user] = await Promise.all([
+  const [related, reviews, settings, deliveryOptions, user] = await Promise.all([
     getRelatedProducts(product),
     getProductReviews(product.id),
     getStoreSettings(),
-    getDeliveryZones(),
+    getDeliveryOptions(),
     getSessionUser(),
   ]);
 
@@ -88,7 +90,6 @@ export default async function ProductPage({
   const inStock = product.stock > 0;
   const lowStock = inStock && product.stock <= settings.low_stock_banner_threshold;
   const specs = (product.specifications ?? []) as SpecItem[];
-  const dhaka = zones.find((z) => z.slug === "inside-dhaka") ?? zones[0];
 
   // Product JSON-LD so Google can render price and availability in results.
   const jsonLd = {
@@ -195,25 +196,24 @@ export default async function ProductPage({
             signedIn={Boolean(user)}
           />
 
-          {/* Delivery, warranty and returns — the three questions every BD
-              shopper asks before agreeing to cash on delivery. */}
-          <div className="mt-6 divide-y divide-line rounded-xl border border-line bg-surface">
-            <div className="flex gap-3 p-4">
-              <Truck size={18} className="mt-0.5 shrink-0 text-brand-600" />
-              <div className="text-sm">
-                <p className="font-medium text-ink">
-                  Delivery from {dhaka ? formatTaka(dhaka.fee_paisa) : "৳60"}
-                </p>
-                <p className="mt-0.5 text-ink-muted">
-                  {dhaka
-                    ? `Inside Dhaka in ${dhaka.min_days}–${dhaka.max_days} days. `
-                    : ""}
-                  {product.delivery_note ??
-                    "Charges for your district are calculated at checkout."}
-                </p>
-              </div>
+          {/* Shipping options up front, priced. A shopper deciding whether to
+              buy should not have to reach checkout to learn what postage
+              costs — these are the same three options and the same numbers
+              the cart and checkout use. */}
+          <div className="mt-6">
+            <div className="mb-2.5 flex items-center gap-2">
+              <Truck size={17} className="shrink-0 text-brand-600" />
+              <h2 className="text-sm font-semibold text-ink">Shipping options</h2>
             </div>
+            <DeliveryOptionCards options={deliveryOptions} />
+            {product.delivery_note ? (
+              <p className="mt-2 text-xs text-ink-muted">{product.delivery_note}</p>
+            ) : null}
+          </div>
 
+          {/* Warranty and returns — the other two questions every BD shopper
+              asks before agreeing to cash on delivery. */}
+          <div className="mt-4 divide-y divide-line rounded-xl border border-line bg-surface">
             <div className="flex gap-3 p-4">
               <ShieldCheck size={18} className="mt-0.5 shrink-0 text-success" />
               <div className="text-sm">

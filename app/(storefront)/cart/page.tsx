@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { getCartQuote } from "@/lib/actions/cart";
+import { getDeliveryOptions } from "@/lib/queries/delivery";
 import { CartView } from "@/components/cart/cart-view";
 import { EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,10 @@ export const metadata: Metadata = { title: "Your cart" };
 export const dynamic = "force-dynamic";
 
 export default async function CartPage() {
-  const quote = await getCartQuote();
+  const [quote, deliveryOptions] = await Promise.all([
+    getCartQuote(),
+    getDeliveryOptions(),
+  ]);
 
   if (quote.lines.length === 0) {
     return (
@@ -37,7 +41,7 @@ export default async function CartPage() {
       <p className="mt-1 text-sm text-ink-muted tabular">
         {quote.item_count} {quote.item_count === 1 ? "item" : "items"}
       </p>
-      <CartView initialQuote={quote} />
+      <CartView initialQuote={quote} deliveryOptions={deliveryOptions} />
     </div>
   );
 }
