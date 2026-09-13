@@ -1,7 +1,12 @@
 "use server";
 
-import { listAdminProducts, getCategoryNames } from "@/lib/queries/admin";
+import {
+  listAdminProducts,
+  listAdminCustomers,
+  getCategoryNames,
+} from "@/lib/queries/admin";
 import { ProductRows } from "@/components/admin/product-rows";
+import { CustomerRows } from "@/components/admin/customer-rows";
 import type { MoreRows } from "@/components/admin/load-more-rows";
 
 /**
@@ -25,6 +30,26 @@ export async function loadMoreAdminProducts(
 
   return {
     nodes: <ProductRows rows={rows} categoryName={categoryName} />,
+    nextPage,
+  };
+}
+
+export async function loadMoreAdminCustomers(
+  params: Record<string, string>,
+  page: number,
+): Promise<MoreRows> {
+  const { rows, nextPage, staff } = await listAdminCustomers({ q: params.q, page });
+
+  return {
+    // `staff` comes from the permission check inside the query, not from the
+    // client — the caller cannot talk itself into an admin-only role select.
+    nodes: (
+      <CustomerRows
+        rows={rows}
+        staffId={staff.id}
+        staffIsAdmin={staff.role === "admin"}
+      />
+    ),
     nextPage,
   };
 }

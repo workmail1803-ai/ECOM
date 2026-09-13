@@ -568,3 +568,103 @@ export const getCategoryNames = cache(async (): Promise<Map<string, string>> => 
     ((data ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]),
   );
 });
+
+export interface AdminCustomerRow {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+  marketing_opt_in: boolean;
+  role: AppRole;
+  orderCount: number;
+  spendPaisa: number;
+}
+
+/**
+ * One page of the admin customer table, with each customer's order tally.
+ *
+ * The order lookup is the reason this is paginated rather than capped at 200
+ * profiles: it fans out to every order those customers ever placed, with no
+ * limit of its own. Two hundred repeat buyers was already thousands of rows
+ * held in a function to produce two numbers per row. Thirty at a time keeps
+ * the fan-out proportional to what is actually on screen.
+ */
+export const listAdminCustomers = cache(
+  async (filter: { q?: string; page?: number }) => {
+    const staff = await requirePermission("customers");
+    const db = createAdminClient();
+
+    const page = Math.max(1, Math.min(500, filter.page ?? 1));
+    const from = (page - 1) * ADMIN_PAGE_SIZE;
+
+    let query = db
+      .from("profiles")
+      .select("id, full_name, email, phone, created_at, marketing_opt_in", {
+        count: "exact",
+      })
+      .order("created_at", { ascending: false });
+
+    if (filter.q) {
+      const term = filter.q.replace(/[,()\\]/g, "\\$&");
+      query = query.or(
+        `full_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`,
+      );
+    }
+
+    const { data, count } = await query.range(from, from + ADMIN_PAGE_SIZE - 1);
+    const profiles = (data ?? []) as {
+      id: string;
+      full_name: string | null;
+      email: string | null;
+      phone: string | null;
+      created_at: string;
+      marketing_opt_in: boolean;
+    }[];
+
+    if (profiles.length === 0) {
+      return { rows: [] as AdminCustomerRow[], total: count ?? 0, page, nextPage: null, staff };
+    }
+
+    const ids = profiles.map((p) => p.id);
+    const [{ data: roles }, { data: orders }] = await Promise.all([
+      db.from("user_roles").select("user_id, role").in("user_id", ids),
+      db.from("orders").select("user_id, total_paisa, status").in("user_id", ids),
+    ]);
+
+    // Highest role wins, matching my_role() in migration 0007.
+    const RANK: Record<AppRole, number> = { customer: 1, manager: 2, admin: 3 };
+    const roleByUser = new Map<string, AppRole>();
+    for (const r of (roles ?? []) as { user_id: string; role: AppRole }[]) {
+      const current = roleByUser.get(r.user_id);
+      if (!current || RANK[r.role] > RANK[current]) roleByUser.set(r.user_id, r.role);
+    }
+
+    const statsByUser = new Map<string, { count: number; spend: number }>();
+    for (const o of (orders ?? []) as {
+      user_id: string | null;
+      total_paisa: number;
+      status: string;
+    }[]) {
+      if (!o.user_id || o.status === "cancelled" || o.status === "returned") continue;
+      const s = statsByUser.get(o.user_id) ?? { count: 0, spend: 0 };
+      s.count += 1;
+      s.spend += o.total_paisa;
+      statsByUser.set(o.user_id, s);
+    }
+
+    const total = count ?? profiles.length;
+    return {
+      rows: profiles.map((p) => ({
+        ...p,
+        role: roleByUser.get(p.id) ?? ("customer" as AppRole),
+        orderCount: statsByUser.get(p.id)?.count ?? 0,
+        spendPaisa: statsByUser.get(p.id)?.spend ?? 0,
+      })),
+      total,
+      page,
+      nextPage: from + profiles.length < total ? page + 1 : null,
+      staff,
+    };
+  },
+);
