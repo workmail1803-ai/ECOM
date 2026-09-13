@@ -10,16 +10,30 @@ export default async function AdminCategoriesPage() {
   await requirePermission("categories");
   const db = createAdminClient();
 
-  const [{ data: categories }, { data: counts }] = await Promise.all([
-    db.from("categories").select("*").order("position"),
-    db.from("products").select("category_id").neq("status", "archived"),
-  ]);
+  const { data: categoryRows } = await db
+    .from("categories")
+    .select("*")
+    .order("position");
+  const categories = (categoryRows ?? []) as Category[];
 
-  const productCount = new Map<string, number>();
-  for (const row of (counts ?? []) as { category_id: string | null }[]) {
-    if (!row.category_id) continue;
-    productCount.set(row.category_id, (productCount.get(row.category_id) ?? 0) + 1);
-  }
+  // One head-count per category rather than pulling every product row back to
+  // tally them here. The old version selected `category_id` for the entire
+  // catalogue and counted in JS — fine at 25 products, a way to exhaust the
+  // function's memory at 50,000. `head: true` returns no rows at all, just the
+  // count, and there are only ever a handful of categories.
+  const countResults = await Promise.all(
+    categories.map((c) =>
+      db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("category_id", c.id)
+        .neq("status", "archived"),
+    ),
+  );
+
+  const productCount = new Map<string, number>(
+    categories.map((c, i) => [c.id, countResults[i]?.count ?? 0]),
+  );
 
   return (
     <>
@@ -28,7 +42,7 @@ export default async function AdminCategoriesPage() {
         description="These drive the storefront nav, the homepage tiles and the listing filters."
       />
       <CategoryManager
-        categories={(categories ?? []) as Category[]}
+        categories={categories}
         productCount={Object.fromEntries(productCount)}
       />
     </>

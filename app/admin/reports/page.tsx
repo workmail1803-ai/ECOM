@@ -29,17 +29,27 @@ export default async function AdminReportsPage({
   from.setDate(from.getDate() - window);
   from.setHours(0, 0, 0, 0);
 
+  // Both scans are capped. A 180-day window on a busy shop is tens of
+  // thousands of rows, and pulling them all into a Vercel function is how the
+  // reports page takes the whole deployment down. Past the cap the page says
+  // the figures are partial rather than presenting a short count as the truth.
+  const ORDER_CAP = 10000;
+  const LINE_CAP = 20000;
+
   const [series, { data: orders }, { data: lines }] = await Promise.all([
     getRevenueSeries(window),
     db
       .from("orders")
       .select("id, total_paisa, subtotal_paisa, discount_paisa, delivery_fee_paisa, status, payment_method")
-      .gte("placed_at", from.toISOString()),
+      .gte("placed_at", from.toISOString())
+      .order("placed_at", { ascending: false })
+      .limit(ORDER_CAP),
     db
       .from("order_items")
       .select("product_id, product_name, quantity, line_total_paisa, orders!inner(placed_at, status)")
       .gte("orders.placed_at", from.toISOString())
-      .not("orders.status", "in", "(cancelled,returned)"),
+      .not("orders.status", "in", "(cancelled,returned)")
+      .limit(LINE_CAP),
   ]);
 
   const allOrders = (orders ?? []) as {
@@ -117,6 +127,11 @@ export default async function AdminReportsPage({
 
   const windows = [7, 30, 90, 180];
 
+  // Say so when a cap was hit, rather than letting a partial total read as
+  // the month's real revenue.
+  const truncated =
+    allOrders.length >= ORDER_CAP || soldLines.length >= LINE_CAP;
+
   const tiles = [
     { label: "Revenue", value: formatTakaCompact(revenue), sub: `${valid.length} orders` },
     { label: "Gross profit", value: formatTakaCompact(grossProfit), sub: "Revenue − cost of goods" },
@@ -138,6 +153,17 @@ export default async function AdminReportsPage({
         title="Reports"
         description={`Last ${window} days. Cancelled and returned orders are excluded throughout.`}
       />
+
+      {truncated ? (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-warning/20 bg-warning-soft px-3 py-2 text-sm text-warning"
+        >
+          This window exceeds what one report can total, so these figures cover
+          only the most recent {ORDER_CAP.toLocaleString()} orders. Choose a
+          shorter window for an exact total.
+        </p>
+      ) : null}
 
       <div className="mb-4 flex gap-1">
         {windows.map((d) => (

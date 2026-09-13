@@ -376,6 +376,136 @@ export const CONTENT_PAGES: ContentPage[] = [
       },
     ],
   },
+
+  {
+    slug: "group-buy",
+    title: "Group buy",
+    description:
+      "Buy as a group — offices, hostels, clubs and resellers — at a tier price instead of retail.",
+    intro:
+      "If you are buying the same item several times over, you should not be paying the same price as someone buying one. Group buy is for offices kitting out a floor, hostels buying in bulk, clubs, gift lists and small resellers testing a line.",
+    sections: [
+      {
+        heading: "How it works",
+        points: [
+          "Tell us the item and the quantity. Five units is the minimum for a tier price.",
+          "We confirm stock and quote you a per-unit price within one working day.",
+          "You pay a 20% advance to lock the tier, and the balance on delivery.",
+          "Everything ships as one consignment to one address, with one invoice.",
+        ],
+      },
+      {
+        heading: "What you get",
+        points: [
+          "A lower per-unit price than the listed retail price, in writing before you commit.",
+          "The same official warranty as a single retail purchase, per unit.",
+          "One named contact for the whole order instead of the general support queue.",
+          "A consolidated invoice suitable for company reimbursement.",
+        ],
+      },
+      {
+        heading: "Before you ask",
+        body: [
+          "Tier prices depend on what we can source, so they are quoted per enquiry rather than published as a fixed table. We will tell you plainly if an item cannot be discounted at your quantity instead of padding the quote.",
+          "Group orders are not eligible for coupon codes — the tier price already reflects the discount.",
+        ],
+      },
+      {
+        heading: "Start an enquiry",
+        body: [
+          "Call or WhatsApp us with the item, the quantity and your delivery district. Quotes are valid for seven days.",
+        ],
+      },
+    ],
+  },
+
+  {
+    slug: "dropship",
+    title: "Dropshipping",
+    description:
+      "Sell our catalogue from your own page — we hold the stock, pack it and deliver it under your name.",
+    intro:
+      "If you already have an audience — a Facebook page, an Instagram shop, a marketplace listing — you do not need to buy stock to start selling. You take the order, we ship it to your customer in your packaging slip.",
+    sections: [
+      {
+        heading: "How it works",
+        points: [
+          "Apply with your page or shop link. We check it is a real, active storefront.",
+          "You get a dropship price list, refreshed weekly, and live stock counts.",
+          "You forward orders to us with your customer's address; we pack and dispatch.",
+          "The parcel goes out under your shop's name — we do not include our marketing.",
+        ],
+      },
+      {
+        heading: "Money and settlement",
+        points: [
+          "You keep the difference between your listed price and the dropship price.",
+          "Cash on delivery is settled weekly, minus the dropship price and delivery.",
+          "Prepaid orders are settled within two working days of dispatch.",
+          "Returns follow the same 7-day replacement window as retail orders.",
+        ],
+      },
+      {
+        heading: "What we expect",
+        points: [
+          "Advertise the specification we publish, not a better one. Misdescribed items come back to us.",
+          "Pass warranty claims through to us rather than handling them yourself.",
+          "Do not list below the dropship price — it undercuts every other partner.",
+        ],
+      },
+      {
+        heading: "Apply",
+        body: [
+          "Message us with your page link and roughly how many orders a month you handle. Most applications are answered within two working days.",
+        ],
+      },
+    ],
+  },
+
+  {
+    slug: "be-partner",
+    title: "Be a partner",
+    description:
+      "Retail, corporate supply and affiliate partnerships with Nazmul.",
+    intro:
+      "Partnership covers everything that is not a one-off retail sale: shops that want to stock us, companies that buy on a purchase order, and creators who send us customers.",
+    sections: [
+      {
+        heading: "Retail partner",
+        body: [
+          "For physical shops and online stores that want to carry our lines. You buy at wholesale on a standing account, with credit terms agreed after the first three settled orders.",
+        ],
+        points: [
+          "Wholesale pricing across the full catalogue.",
+          "Priority allocation when stock is tight.",
+          "Display units for lines you commit to stocking.",
+        ],
+      },
+      {
+        heading: "Corporate supply",
+        body: [
+          "For companies, schools and NGOs buying against a purchase order. We invoice with full VAT and BIN details, supply a delivery challan, and accept bank transfer or cheque on agreed terms.",
+        ],
+        points: [
+          "Quotation and proforma invoice on request.",
+          "Delivery to multiple sites on one purchase order.",
+          "Asset tagging and itemised serial lists for warranty tracking.",
+        ],
+      },
+      {
+        heading: "Affiliate",
+        body: [
+          "For creators and communities. You get a tracked link and a commission on delivered, non-returned orders, paid monthly by bKash or bank transfer.",
+        ],
+      },
+      {
+        heading: "Get in touch",
+        body: [
+          "Tell us which of the three fits you and a little about your business. We will come back with the terms in writing before anything is signed.",
+        ],
+      },
+    ],
+  },
 ];
 
 export function getContentPage(slug: string): ContentPage | undefined {

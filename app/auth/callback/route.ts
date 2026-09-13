@@ -12,7 +12,18 @@ import { readGuestToken, clearGuestToken } from "@/lib/cart/session";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/account";
+  // Only ever an in-app path: an open redirect here would let a crafted email
+  // bounce a freshly-authenticated visitor to someone else's site.
+  const raw = searchParams.get("next") ?? "/account";
+  const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/account";
+
+  // Supabase appends its own error when a link is expired or already consumed.
+  const supabaseError = searchParams.get("error_description") ?? searchParams.get("error");
+  if (supabaseError) {
+    return NextResponse.redirect(
+      `${origin}/sign-in?error=${encodeURIComponent(supabaseError)}`,
+    );
+  }
 
   if (!code) {
     return NextResponse.redirect(`${origin}/sign-in?error=missing_code`);

@@ -56,8 +56,10 @@ export function UpdatePasswordForm() {
   const [state, action, pending] = useActionState(updatePassword, initial);
   const [ready, setReady] = useState<boolean | null>(null);
 
-  // The recovery token arrives in the URL fragment. detectSessionInUrl in the
-  // browser client consumes it, so wait for a session before offering the form.
+  // By the time this renders, /auth/callback has already exchanged the emailed
+  // code for a session — the recovery link points there, not here. We still
+  // wait for the client to see that session before offering the form, so a
+  // genuinely expired link shows the explanation instead of a dead form.
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data }) => setReady(Boolean(data.session)));

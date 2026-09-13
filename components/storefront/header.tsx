@@ -1,13 +1,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Phone, User, Heart, Package } from "lucide-react";
+import { Phone, Heart, Package } from "lucide-react";
 import { getCategories } from "@/lib/queries/catalog";
 import { getStoreSettings } from "@/lib/queries/settings";
 import { getCartQuote } from "@/lib/actions/cart";
 import { getSessionUser, isStaffRole } from "@/lib/auth/session";
 import { SearchBox } from "./search-box";
 import { CartButton } from "./cart-button";
-import { MobileNav } from "./mobile-nav";
+import { CategoryDrawer } from "./category-drawer";
+import { AccountMenu } from "./account-menu";
 
 export async function Header() {
   const [categories, settings, quote, user] = await Promise.all([
@@ -45,7 +46,7 @@ export async function Header() {
       </div>
 
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">
-        <MobileNav categories={topLevel} />
+        <CategoryDrawer categories={topLevel} />
 
         <Link href="/" className="flex shrink-0 flex-col">
           <div className="flex items-baseline gap-1.5">
@@ -74,15 +75,9 @@ export async function Header() {
             <Heart size={19} />
           </Link>
 
-          <Link
-            href={user ? "/account" : "/sign-in"}
-            className="inline-flex h-10 items-center gap-2 rounded-lg px-2.5 text-ink-soft hover:bg-surface-sunken"
-          >
-            <User size={19} />
-            <span className="hidden text-sm font-medium lg:inline">
-              {user ? user.profile?.full_name?.split(" ")[0] ?? "Account" : "Sign in"}
-            </span>
-          </Link>
+          <AccountMenu
+            name={user ? user.profile?.full_name?.split(" ")[0] ?? "Account" : null}
+          />
 
           <CartButton count={quote.item_count} />
         </div>
@@ -95,6 +90,7 @@ export async function Header() {
 
       <nav className="hidden border-t border-line md:block">
         <div className="mx-auto flex h-11 max-w-7xl items-center gap-1 overflow-x-auto px-4">
+          <CategoryDrawer categories={topLevel} variant="bar" />
           <Link
             href="/products"
             className="shrink-0 rounded-md px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken"

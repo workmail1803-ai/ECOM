@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireStaff, requireAdmin } from "@/lib/auth/session";
+import { requireStaff, requireAdmin, requirePermission } from "@/lib/auth/session";
 import type { AppRole, Order, OrderStatus } from "@/types/database";
 import { MANUAL_KEY_PREFIX } from "@/lib/payments/manual";
 
@@ -26,10 +27,17 @@ export interface DashboardStats {
   totalCustomers: number;
   lowStockCount: number;
   pendingReviews: number;
-  grossMarginPaisa: number;
 }
 
-export async function getDashboardStats(): Promise<DashboardStats> {
+/**
+ * Counts and revenue for the KPI tiles.
+ *
+ * Margin deliberately lives in `getMonthlyMargin` instead: it is the only
+ * figure here that needs a scan of `order_items`, and holding the eight cheap
+ * tiles hostage to it made the whole dashboard feel slow. They now render on
+ * their own Suspense boundaries.
+ */
+export const getDashboardStats = cache(async (): Promise<DashboardStats> => {
   await requireStaff();
   const db = createAdminClient();
 
@@ -73,13 +81,51 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const todayRows = today.data ?? [];
   const monthRows = month.data ?? [];
 
-  // Margin needs cost, which only the service role can read. Computed from the
-  // month's delivered lines rather than every order ever placed.
+  return {
+    todayRevenuePaisa: todayRows.reduce((s, o) => s + (o.total_paisa ?? 0), 0),
+    todayOrders: todayRows.length,
+    monthRevenuePaisa: monthRows.reduce((s, o) => s + (o.total_paisa ?? 0), 0),
+    monthOrders: monthRows.length,
+    pendingOrders: pending.count ?? 0,
+    deliveredOrders: delivered.count ?? 0,
+    totalCustomers: customers.count ?? 0,
+    lowStockCount: lowStock.count ?? 0,
+    pendingReviews: reviews.count ?? 0,
+  };
+});
+
+/** How many order lines one margin calculation will read. */
+const MARGIN_LINE_CAP = 5000;
+
+export interface MonthlyMargin {
+  grossMarginPaisa: number;
+  /** True when the month exceeded the cap and the figure is partial. */
+  truncated: boolean;
+}
+
+/**
+ * Gross margin for the current month.
+ *
+ * Margin needs `cost_paisa`, which is revoked at the column level and readable
+ * only by the service role, so it cannot be done in a view the storefront
+ * shares. It is the one dashboard figure that scans `order_items`, which is
+ * why it is bounded: an unbounded month would pull every line into a 1 GB
+ * function and the dashboard would die exactly when the shop is busiest.
+ * Past the cap the number is reported as partial rather than quietly wrong.
+ */
+export const getMonthlyMargin = cache(async (): Promise<MonthlyMargin> => {
+  await requireStaff();
+  const db = createAdminClient();
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
   const { data: soldLines } = await db
     .from("order_items")
     .select("product_id, quantity, line_total_paisa, orders!inner(placed_at, status)")
     .gte("orders.placed_at", monthStart.toISOString())
-    .not("orders.status", "in", "(cancelled,returned)");
+    .not("orders.status", "in", "(cancelled,returned)")
+    .limit(MARGIN_LINE_CAP);
 
   const lines = (soldLines ?? []) as unknown as {
     product_id: string | null;
@@ -104,19 +150,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     return sum + (l.line_total_paisa - cost);
   }, 0);
 
-  return {
-    todayRevenuePaisa: todayRows.reduce((s, o) => s + (o.total_paisa ?? 0), 0),
-    todayOrders: todayRows.length,
-    monthRevenuePaisa: monthRows.reduce((s, o) => s + (o.total_paisa ?? 0), 0),
-    monthOrders: monthRows.length,
-    pendingOrders: pending.count ?? 0,
-    deliveredOrders: delivered.count ?? 0,
-    totalCustomers: customers.count ?? 0,
-    lowStockCount: lowStock.count ?? 0,
-    pendingReviews: reviews.count ?? 0,
-    grossMarginPaisa,
-  };
-}
+  return { grossMarginPaisa, truncated: lines.length >= MARGIN_LINE_CAP };
+});
 
 /** Daily revenue for the dashboard chart. Bounded by design — 30 points max. */
 export async function getRevenueSeries(days = 30) {
@@ -458,3 +493,78 @@ export async function listStaff(): Promise<StaffMember[]> {
     }))
     .sort((a, b) => (a.role === "admin" ? -1 : b.role === "admin" ? 1 : 0));
 }
+
+/** Rows per page for the admin tables. */
+export const ADMIN_PAGE_SIZE = 30;
+
+export interface AdminProductRow {
+  id: string;
+  name: string;
+  slug: string;
+  sku: string;
+  price_paisa: number;
+  compare_at_paisa: number | null;
+  cost_paisa: number | null;
+  stock: number;
+  status: "draft" | "active" | "archived";
+  thumbnail_url: string | null;
+  units_sold: number;
+  low_stock_threshold: number;
+  category_id: string | null;
+}
+
+/**
+ * One page of the admin product table.
+ *
+ * Was a flat `.limit(200)`: every visit to /admin/products rendered two
+ * hundred rows with images and margin columns, whether or not anyone scrolled
+ * past the first ten. Now the page ships 30 and the rest load on scroll.
+ */
+export const listAdminProducts = cache(
+  async (filter: { q?: string; status?: string; page?: number }) => {
+    await requirePermission("products");
+    const db = createAdminClient();
+
+    const page = Math.max(1, Math.min(500, filter.page ?? 1));
+    const from = (page - 1) * ADMIN_PAGE_SIZE;
+
+    let query = db
+      .from("products")
+      .select(
+        "id, name, slug, sku, price_paisa, compare_at_paisa, cost_paisa, stock, status, thumbnail_url, units_sold, low_stock_threshold, category_id",
+        { count: "exact" },
+      )
+      .order("created_at", { ascending: false });
+
+    if (filter.status && filter.status !== "all") {
+      query = query.eq("status", filter.status);
+    }
+    if (filter.q) {
+      // Escape the PostgREST `or` metacharacters — a name containing a comma
+      // or a parenthesis would otherwise be parsed as more filter syntax.
+      const term = filter.q.replace(/[,()\\]/g, "\\$&");
+      query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`);
+    }
+
+    const { data, count } = await query.range(from, from + ADMIN_PAGE_SIZE - 1);
+    const rows = (data ?? []) as unknown as AdminProductRow[];
+    const total = count ?? rows.length;
+
+    return {
+      rows,
+      total,
+      page,
+      nextPage: from + rows.length < total ? page + 1 : null,
+    };
+  },
+);
+
+/** Category id → name, for the admin tables. Small, and cached per request. */
+export const getCategoryNames = cache(async (): Promise<Map<string, string>> => {
+  await requireStaff();
+  const db = createAdminClient();
+  const { data } = await db.from("categories").select("id, name");
+  return new Map(
+    ((data ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]),
+  );
+});

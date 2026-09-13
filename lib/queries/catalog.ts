@@ -137,6 +137,10 @@ export async function listProducts(
   if (query.min != null) q = q.gte("price_paisa", query.min * 100);
   if (query.max != null) q = q.lte("price_paisa", query.max * 100);
   if (query.in_stock === "1") q = q.gt("stock", 0);
+  // A non-null compare-at price IS a markdown: migration 0003 constrains it to
+  // `compare_at_paisa is null or compare_at_paisa > price_paisa`, so there is
+  // nothing to re-check in memory and `count` stays exact.
+  if (query.on_sale === "1") q = q.not("compare_at_paisa", "is", null);
 
   switch (query.sort) {
     case "price_asc":

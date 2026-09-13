@@ -26,6 +26,8 @@ export const productQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(500).optional().default(1),
   in_stock: z.enum(["1", "0"]).optional(),
   rating: z.coerce.number().int().min(1).max(5).optional(),
+  /** Only products marked down below their compare-at price. */
+  on_sale: z.enum(["1"]).optional(),
 });
 
 export type ProductQuery = z.infer<typeof productQuerySchema>;

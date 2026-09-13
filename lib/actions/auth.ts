@@ -129,8 +129,17 @@ export async function requestPasswordReset(
   }
 
   const supabase = await createClient();
+  // Through /auth/callback, NOT straight to /reset-password.
+  //
+  // Supabase sends a PKCE link carrying `?code=…`, which has to be exchanged
+  // for a session before the new password can be set. /reset-password does no
+  // exchange, so pointing the email there left the visitor with no session and
+  // the form told them — wrongly — that the link had expired. The callback
+  // route exchanges the code and then forwards them on, exactly as the
+  // sign-up confirmation link already did.
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/reset-password`,
+    redirectTo: `${site}/auth/callback?next=/reset-password`,
   });
 
   // Always the same answer, whether or not the account exists.

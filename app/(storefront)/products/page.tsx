@@ -6,7 +6,7 @@ import { parseProductQuery } from "@/lib/validations/catalog";
 import { ProductGrid } from "@/components/storefront/sections";
 import { FilterPanel } from "@/components/product/filter-panel";
 import { SortSelect } from "@/components/product/sort-select";
-import { Pagination } from "@/components/product/pagination";
+import { LoadMoreProducts } from "@/components/product/load-more-products";
 import { EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 
@@ -25,6 +25,16 @@ export default async function ProductsPage({
 
   const [{ products, total, page, pageCount }, categories, brands] =
     await Promise.all([listProducts(query), getCategories(), getBrands()]);
+
+  // Echoed to the load-more action so appended pages keep the same filters.
+  // `page` is dropped: the client tracks its own cursor from here.
+  const listingQuery = new URLSearchParams(
+    Object.entries(params).flatMap(([k, v]) => {
+      if (k === "page" || v == null) return [];
+      const value = Array.isArray(v) ? v[0] : v;
+      return value ? [[k, value] as [string, string]] : [];
+    }),
+  ).toString();
 
   const activeCategory = categories.find((c) => c.slug === query.category);
 
@@ -88,7 +98,10 @@ export default async function ProductsPage({
           ) : (
             <>
               <ProductGrid products={products} priorityCount={5} />
-              <Pagination page={page} pageCount={pageCount} />
+              <LoadMoreProducts
+                query={listingQuery}
+                initialNextPage={page < pageCount ? page + 1 : null}
+              />
             </>
           )}
         </div>

@@ -8,11 +8,11 @@ import type { Banner } from "@/types/database";
  *
  * The card is a fixed 9:16 portrait at every breakpoint — that ratio is the
  * whole look, so it does not change between phone and desktop. Only how many
- * fit on screen changes: roughly two on a phone, four or five on a monitor.
+ * fit on screen changes: exactly two on a phone, four or five on a monitor.
  *
- * Widths are set so the next card is always partly visible. That sliver is the
- * only affordance telling someone the row scrolls, and without it people assume
- * two cards is all there is.
+ * On a phone the two cards fill the row exactly, with no sliver of a third.
+ * From `sm:` up the widths go back to leaving the next card partly visible,
+ * which is the affordance that tells a mouse user the row scrolls at all.
  *
  * Content comes from `banners` — artwork, Bangla headline, caption, link and
  * accent colour are all editable at /admin/banners with no deploy. Two cards is
@@ -43,19 +43,30 @@ export function HeroCards({
         */}
         <ul
           className="
-            rail flex gap-1.5 overflow-x-auto px-2 pb-0.5
-            scroll-pl-2 sm:gap-2 sm:px-3 sm:scroll-pl-3
+            rail flex gap-2 overflow-x-auto px-2 pb-0.5
+            scroll-pl-2 sm:px-3 sm:scroll-pl-3
           "
         >
           {banners.map((b, i) => (
             <li
               key={b.id}
-              // Two cards fit fully on a phone with the third showing as a
-              // sliver; four then five as the viewport grows. The sliver is the
-              // only cue that the row scrolls at all.
+              // Phone: exactly two cards, nothing of a third.
+              //
+              // A flex-basis percentage resolves against the container's
+              // CONTENT box, so subtracting the one 0.5rem gap between the
+              // pair and halving it lands the second card's right edge exactly
+              // on the content edge. That alone still leaks a sliver, because
+              // the rail's own px-2 padding is *inside* the scrollport and the
+              // third card starts one gap later — visible unless the gap is at
+              // least as wide as that padding. gap-2 matching px-2 is what
+              // pushes the third card to precisely the scrollport edge.
+              //
+              // From sm: up the widths go back to showing a sliver of the next
+              // card, which is the only cue that the row scrolls.
               className="
                 flex-none
-                basis-[47.5%] sm:basis-[38%] md:basis-[31%]
+                basis-[calc((100%-0.5rem)/2)]
+                sm:basis-[38%] md:basis-[31%]
                 lg:basis-[23.5%] xl:basis-[19.5%]
               "
             >
@@ -92,7 +103,7 @@ function CampaignCard({
           src={b.image_url}
           alt=""
           fill
-          sizes="(min-width: 1280px) 250px, (min-width: 1024px) 300px, (min-width: 768px) 31vw, (min-width: 640px) 38vw, 48vw"
+          sizes="(min-width: 1280px) 250px, (min-width: 1024px) 300px, (min-width: 768px) 31vw, (min-width: 640px) 38vw, 50vw"
           priority={priority}
           className="object-cover transition-transform duration-[600ms] ease-out group-hover:scale-[1.05]"
         />

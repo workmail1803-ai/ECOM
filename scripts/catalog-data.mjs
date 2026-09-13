@@ -69,7 +69,11 @@ export const CATEGORIES = [
     description: "RGB strips, smart bulbs, ring lights and desk lamps.",
     position: 5,
     is_featured: true,
-    image_url: img("1550985543-f1ea83691cd1", 600),
+    // Was a stock photo that Unsplash has since removed — it 404'd and the
+    // Lighting tile rendered blank on the homepage. Points at our own copy of
+    // the RGB strip shot instead, which is a product we actually stock and
+    // cannot disappear from under us.
+    image_url: local("a46"),
   },
   {
     slug: "mobile-accessories",
