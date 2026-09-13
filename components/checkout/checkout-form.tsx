@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import * as Icons from "lucide-react";
-import { Truck, Tag, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Truck, Tag, ShieldCheck, Info, type LucideIcon } from "lucide-react";
 import type { Address } from "@/types/database";
 import type { CartQuote } from "@/lib/pricing/types";
 import type { PaymentOption } from "@/lib/payments";
@@ -84,6 +84,7 @@ export function CheckoutForm({
         : outsideCity.trim();
 
   const isPickup = zoneSlug === "office-pickup";
+  const chosenZone = deliveryOptions.find((o) => o.slug === zoneSlug) ?? null;
   const [quote, setQuote] = useState(initialQuote);
   const [method, setMethod] = useState<string>(paymentOptions[0]?.id ?? "cod");
   const [, startQuote] = useTransition();
@@ -345,91 +346,128 @@ export function CheckoutForm({
           governs whether an address is needed at all.
         */}
         <section className="rounded-xl border border-line bg-surface p-5">
-          <h2 className="text-base font-semibold text-ink">Delivery</h2>
+          <h2 className="text-base font-semibold text-ink">Select Delivery Area</h2>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {deliveryOptions.map((o) => {
-                const st = styleFor(o.slug);
-                const Icon = st.icon;
-                const active = zoneSlug === o.slug;
+          {/*
+            Full-width rows rather than three across: the radio, the icon, the
+            name and the charge all sit on one line, so the eye compares three
+            prices down a single column instead of across three cards.
+          */}
+          <div className="mt-3 space-y-2">
+            {deliveryOptions.map((o) => {
+              const st = styleFor(o.slug);
+              const Icon = st.icon;
+              const active = zoneSlug === o.slug;
 
-                return (
-                  <button
-                    key={o.slug}
-                    type="button"
-                    onClick={() => setZoneSlug(o.slug)}
-                    aria-pressed={active}
-                    className={`rounded-xl border p-3 text-left transition-colors ${
-                      active
-                        ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600/20"
-                        : "border-line bg-surface hover:border-line-strong"
+              return (
+                <button
+                  key={o.slug}
+                  type="button"
+                  onClick={() => setZoneSlug(o.slug)}
+                  aria-pressed={active}
+                  className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
+                    active
+                      ? "border-brand-600 bg-brand-50/50"
+                      : "border-line bg-surface hover:border-line-strong"
+                  }`}
+                >
+                  {/* A real radio would be easier, but the whole row has to be
+                      the target — a 16px circle is not a touch target. */}
+                  <span
+                    className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                      active ? "border-brand-600" : "border-line-strong"
                     }`}
+                    aria-hidden
                   >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex size-7 shrink-0 items-center justify-center rounded-lg ${st.tint} ${st.text}`}
-                      >
-                        <Icon size={15} />
-                      </span>
-                      <span className="text-sm font-semibold text-ink">
-                        {o.name}
-                      </span>
+                    {active ? (
+                      <span className="size-2.5 rounded-full bg-brand-600" />
+                    ) : null}
+                  </span>
+
+                  <Icon size={20} className={`shrink-0 ${st.text}`} />
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-semibold leading-5 text-ink">
+                      {o.name}
                     </span>
                     <span
-                      className={`mt-2 block text-lg font-bold tabular tracking-tight ${
-                        o.feePaisa === 0 ? "text-success" : "text-ink"
+                      className={`block text-sm tabular ${
+                        o.feePaisa === 0 ? "text-success" : "text-ink-muted"
                       }`}
                     >
                       {o.feePaisa === 0 ? "Free" : formatTaka(o.feePaisa)}
                     </span>
-                    <span className="block text-[11px] text-ink-muted">
-                      {etaLabel(o)}
-                    </span>
-                  </button>
-                );
-              })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* A one-line restatement of what was just chosen. It is the last
+              thing between here and payment, so the charge and the timeframe
+              are spelled out rather than left implied by the row above. */}
+          {chosenZone ? (
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-brand-600/15 bg-brand-50/60 px-4 py-2.5 text-xs text-brand-700">
+              <Info size={14} className="shrink-0" />
+              <span>
+                Selected: <strong className="font-semibold">{chosenZone.name}</strong>
+              </span>
+              <span className="text-brand-700/40">•</span>
+              <span>
+                Charge:{" "}
+                <strong className="font-semibold tabular">
+                  {chosenZone.feePaisa === 0
+                    ? "Free"
+                    : formatTaka(chosenZone.feePaisa)}
+                </strong>
+              </span>
+              <span className="text-brand-700/40">•</span>
+              <span>
+                Time: <strong className="font-semibold">{etaLabel(chosenZone)}</strong>
+              </span>
             </div>
+          ) : null}
 
-            {/* The server still receives a district; the choice above just
-                decides what it is, instead of making the customer find
-                their own in a list of 64. */}
-            <input type="hidden" name="district" value={district} />
+          {/* The server still receives a district; the choice above just
+              decides what it is, instead of making the customer find
+              their own in a list of 64. */}
+          <input type="hidden" name="district" value={district} />
 
-            {state.fieldErrors?.district ? (
-              <p role="alert" className="mt-1.5 text-xs text-danger">
-                {state.fieldErrors.district}
+          {state.fieldErrors?.district ? (
+            <p role="alert" className="mt-1.5 text-xs text-danger">
+              {state.fieldErrors.district}
+            </p>
+          ) : null}
+
+          {zoneSlug === "outside-dhaka" ? (
+            <div className="mt-3">
+              <label
+                htmlFor="outside-city"
+                className="mb-1 block text-sm font-medium text-ink"
+              >
+                Your city or district <span className="text-danger">*</span>
+              </label>
+              <Input
+                id="outside-city"
+                required
+                value={outsideCity}
+                onChange={(e) => setOutsideCity(e.target.value)}
+                placeholder="e.g. Sylhet"
+                invalid={Boolean(state.fieldErrors?.district)}
+              />
+              <p className="mt-1 text-xs text-ink-muted">
+                The charge is the same anywhere outside Dhaka — this is only so
+                the courier knows where to go.
               </p>
-            ) : null}
+            </div>
+          ) : null}
 
-            {zoneSlug === "outside-dhaka" ? (
-              <div className="mt-3">
-                <label
-                  htmlFor="outside-city"
-                  className="mb-1 block text-sm font-medium text-ink"
-                >
-                  Your city or district <span className="text-danger">*</span>
-                </label>
-                <Input
-                  id="outside-city"
-                  required
-                  value={outsideCity}
-                  onChange={(e) => setOutsideCity(e.target.value)}
-                  placeholder="e.g. Sylhet"
-                  invalid={Boolean(state.fieldErrors?.district)}
-                />
-                <p className="mt-1 text-xs text-ink-muted">
-                  The charge is the same anywhere outside Dhaka — this is only
-                  so the courier knows where to go.
-                </p>
-              </div>
-            ) : null}
-
-            {isPickup ? (
-              <p className="mt-3 rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-xs leading-5 text-success">
-                Collect from {showroomAddress}. We will call you when it is
-                ready — no delivery address needed.
-              </p>
-            ) : null}
+          {isPickup ? (
+            <p className="mt-3 rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-xs leading-5 text-success">
+              Collect from {showroomAddress}. We will call you when it is ready —
+              no delivery address needed.
+            </p>
+          ) : null}
         </section>
 
         <section className="rounded-xl border border-line bg-surface p-5">
