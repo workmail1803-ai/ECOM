@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateCartId, getExistingCartId } from "@/lib/cart/session";
 import { EMPTY_QUOTE, type CartQuote } from "@/lib/pricing/types";
+import { paymentOptions } from "@/lib/payments";
+import type { PaymentMethod } from "@/types/database";
 
 /**
  * Cart mutations.
@@ -34,22 +36,32 @@ function friendlyError(message: string): string {
   return "Something went wrong. Please try again.";
 }
 
-async function quote(cartId: string, district?: string | null): Promise<CartQuote> {
+async function quote(
+  cartId: string,
+  district?: string | null,
+  paymentMethod?: PaymentMethod | null,
+): Promise<CartQuote> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("quote_cart", {
     p_cart_id: cartId,
     p_district: district ?? null,
     p_coupon_code: null,
+    // Delivery is cheaper on prepaid than on cash on delivery; the adjustment
+    // is applied inside quote_cart from a settings row, never sent from here.
+    p_payment_method: paymentMethod ?? null,
   });
   if (error || !data) return EMPTY_QUOTE;
   return data as CartQuote;
 }
 
 /** Read-only quote for rendering the cart page / header count. */
-export async function getCartQuote(district?: string | null): Promise<CartQuote> {
+export async function getCartQuote(
+  district?: string | null,
+  paymentMethod?: PaymentMethod | null,
+): Promise<CartQuote> {
   const { cartId } = await getExistingCartId();
   if (!cartId) return EMPTY_QUOTE;
-  return quote(cartId, district);
+  return quote(cartId, district, paymentMethod);
 }
 
 export async function addToCart(input: {
@@ -174,16 +186,32 @@ export async function applyCoupon(
 }
 
 /** Quote with a district applied — used by the checkout address step. */
-export async function quoteForDistrict(district: string): Promise<CartQuote> {
+export async function quoteForDistrict(
+  district: string,
+  paymentMethod?: PaymentMethod | null,
+): Promise<CartQuote> {
   const { cartId } = await getExistingCartId();
   if (!cartId) return EMPTY_QUOTE;
+  return quote(cartId, district, paymentMethod);
+}
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("quote_cart", {
-    p_cart_id: cartId,
-    p_district: district,
-    p_coupon_code: null,
-  });
-  if (error || !data) return EMPTY_QUOTE;
-  return data as CartQuote;
+/**
+ * One quote per payment method for the same district.
+ *
+ * The cart uses this to show what each method costs side by side, so the
+ * choice between cash on delivery and bKash is made with the numbers visible
+ * rather than discovered on the last step of checkout. Every figure comes back
+ * from quote_cart — nothing here does arithmetic on money.
+ */
+export async function quoteByPaymentMethod(
+  district: string,
+): Promise<{ method: PaymentMethod; quote: CartQuote }[]> {
+  const { cartId } = await getExistingCartId();
+  if (!cartId) return [];
+
+  const methods = paymentOptions().map((o) => o.id);
+  const quotes = await Promise.all(
+    methods.map(async (method) => ({ method, quote: await quote(cartId, district, method) })),
+  );
+  return quotes;
 }

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { Badge } from "@/components/ui/primitives";
 import { formatTaka } from "@/lib/utils/money";
+import { DeliveryEstimator } from "./delivery-estimator";
 
 /**
  * The cart.
@@ -253,7 +254,11 @@ export function CartView({ initialQuote }: { initialQuote: CartQuote }) {
 
             <div className="flex justify-between">
               <dt className="text-ink-muted">Delivery</dt>
-              <dd className="tabular text-ink-muted">Calculated at checkout</dd>
+              <dd className="tabular text-ink-muted">
+                {quote.delivery_fee_paisa > 0
+                  ? formatTaka(quote.delivery_fee_paisa)
+                  : "Check below"}
+              </dd>
             </div>
 
             <div className="flex justify-between border-t border-line pt-3 text-base">
@@ -263,6 +268,8 @@ export function CartView({ initialQuote }: { initialQuote: CartQuote }) {
               </dd>
             </div>
           </dl>
+
+          <DeliveryEstimator subtotalPaisa={quote.subtotal_paisa} />
 
           {quote.has_blocking_issue ? (
             <p className="mt-4 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-xs font-medium text-danger">

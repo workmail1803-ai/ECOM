@@ -15,6 +15,7 @@ import {
   Truck,
   BarChart3,
   Settings,
+  Palette,
   Menu,
   X,
   CreditCard,
@@ -74,6 +75,7 @@ const SECTIONS: {
     links: [
       { href: "/admin/reports", label: "Reports", icon: BarChart3, permission: "reports" },
       { href: "/admin/staff", label: "Staff", icon: ShieldCheck, permission: "staff" },
+      { href: "/admin/design", label: "Design", icon: Palette, permission: "settings" },
       { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings" },
     ],
   },

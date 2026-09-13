@@ -8,6 +8,11 @@ import { requireStaff, requireAdmin, requirePermission } from "@/lib/auth/sessio
 import { takaToPaisa } from "@/lib/utils/money";
 import { isManualSubmission } from "@/lib/payments/manual";
 import type { OrderStatus } from "@/types/database";
+import {
+  sanitiseTheme,
+  COLOR_FIELDS,
+  DEFAULT_THEME,
+} from "@/lib/theme/schema";
 
 /**
  * Admin mutations.
@@ -834,4 +839,85 @@ export async function findAccountByEmail(
     .maybeSingle<{ id: string; email: string | null; full_name: string | null }>();
 
   return data ?? null;
+}
+
+// ── Site design ─────────────────────────────────────────────────────────────
+
+/**
+ * Save the storefront theme.
+ *
+ * Admin-only, not delegable: a manager with the `settings` grant could
+ * otherwise restyle the whole shop. The payload is put through
+ * `sanitiseTheme` BEFORE it is written, so the settings row can never hold a
+ * colour that is not `#rrggbb` or a font id that is not compiled in — the
+ * layout interpolates these straight into a <style> block.
+ */
+export async function saveSiteTheme(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requireAdmin();
+
+  const colors: Record<string, string> = {};
+  for (const { key } of COLOR_FIELDS) {
+    colors[key] = String(formData.get(`color__${key}`) ?? "");
+  }
+
+  const theme = sanitiseTheme({
+    headingFont: String(formData.get("headingFont") ?? ""),
+    bodyFont: String(formData.get("bodyFont") ?? ""),
+    radius: Number(formData.get("radius")),
+    colors,
+  });
+
+  const db = createAdminClient();
+  const { error } = await db
+    .from("settings")
+    .upsert(
+      {
+        key: "site_theme",
+        value: theme,
+        description: "Storefront colours, fonts and corner radius.",
+        // settings.is_public defaults to FALSE and the RLS policy is
+        // `using (is_public or is_staff())`, so without this the storefront
+        // reads nothing and silently renders the compiled-in defaults while
+        // the admin panel shows the saved theme. Colours and font names are
+        // visible to every visitor by definition — there is nothing to hide.
+        is_public: true,
+        updated_by: actor.id,
+      },
+      { onConflict: "key" },
+    );
+
+  if (error) return { ok: false, error: error.message };
+
+  // The theme is read in the root layout, so every route is stale.
+  revalidatePath("/", "layout");
+  revalidatePath("/admin/design");
+  return { ok: true, message: "Design saved." };
+}
+
+/** Put the storefront back to the compiled-in design. */
+export async function resetSiteTheme(): Promise<AdminState> {
+  const actor = await requireAdmin();
+  const db = createAdminClient();
+
+  const { error } = await db
+    .from("settings")
+    .upsert(
+      {
+        key: "site_theme",
+        value: DEFAULT_THEME,
+        description: "Storefront colours, fonts and corner radius.",
+        is_public: true,
+        updated_by: actor.id,
+      },
+      { onConflict: "key" },
+    );
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/", "layout");
+  revalidatePath("/admin/design");
+  return { ok: true, message: "Design reset to the defaults." };
 }
