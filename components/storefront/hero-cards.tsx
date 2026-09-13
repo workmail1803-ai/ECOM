@@ -63,8 +63,16 @@ export function HeroCards({
               //
               // From sm: up the widths go back to showing a sliver of the next
               // card, which is the only cue that the row scrolls.
+              //
+              // `snap-always` is scroll-snap-stop: always. Snapping alone is
+              // not enough: `scroll-snap-type: x mandatory` picks the nearest
+              // snap point once the fling ends, so a long swipe coasts past
+              // three or four cards and lands wherever momentum died. This
+              // forbids the scroller from passing over a snap point at all,
+              // which makes every swipe advance exactly one card no matter
+              // how hard it is thrown.
               className="
-                flex-none
+                flex-none snap-always
                 basis-[calc((100%-0.5rem)/2)]
                 sm:basis-[38%] md:basis-[31%]
                 lg:basis-[23.5%] xl:basis-[19.5%]
