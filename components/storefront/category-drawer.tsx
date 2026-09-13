@@ -14,30 +14,53 @@ import {
   Truck,
   Handshake,
   LayoutGrid,
+  Home,
+  Info,
+  Mail,
+  LogIn,
+  UserPlus,
+  User,
+  ShoppingBag,
   type LucideIcon,
 } from "lucide-react";
 import type { Category } from "@/types/database";
 
-const NAVIGATION: { href: string; label: string }[] = [
-  { href: "/products", label: "All products" },
-  { href: "/track", label: "Track order" },
-  { href: "/account/orders", label: "My orders" },
-  { href: "/account/wishlist", label: "Wishlist" },
-  { href: "/delivery", label: "Delivery charges" },
-  { href: "/shipping", label: "Shipping policy" },
-  { href: "/returns", label: "Returns & replacement" },
-  { href: "/warranty", label: "Warranty" },
-  { href: "/payments", label: "Payment methods" },
-  { href: "/authenticity", label: "Authenticity" },
-  { href: "/faq", label: "FAQ" },
-  { href: "/about", label: "About us" },
-  { href: "/contact", label: "Contact" },
+type NavItem = { href: string; label: string; icon: LucideIcon };
+
+/** The short list, matching the client's design — not a sitemap. */
+const NAVIGATION: NavItem[] = [
+  { href: "/", label: "Home", icon: Home },
+  { href: "/about", label: "About", icon: Info },
+  { href: "/contact", label: "Contact", icon: Mail },
+  { href: "/track", label: "Track Order", icon: Truck },
 ];
 
-const PARTNER_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/group-buy", label: "Group Buy", icon: Users },
-  { href: "/dropship", label: "Dropship", icon: Truck },
-  { href: "/be-partner", label: "Be Partner", icon: Handshake },
+/** Shown under the ACCOUNT heading when nobody is signed in. */
+const SIGNED_OUT: NavItem[] = [
+  { href: "/sign-in", label: "Sign In", icon: LogIn },
+  { href: "/sign-up", label: "Register", icon: UserPlus },
+];
+
+/** ...and when somebody is. */
+const SIGNED_IN: NavItem[] = [
+  { href: "/account", label: "My Account", icon: User },
+  { href: "/account/orders", label: "My Orders", icon: ShoppingBag },
+];
+
+const PARTNER_LINKS: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  tone: string;
+}[] = [
+  { href: "/group-buy", label: "Group Buy", icon: Users, tone: "bg-brand-600" },
+  { href: "/dropship", label: "Dropship", icon: Truck, tone: "bg-ink" },
+  {
+    href: "/be-partner",
+    label: "Be Partner",
+    icon: Handshake,
+    tone: "bg-brand-700",
+  },
 ];
 
 /**
@@ -49,9 +72,12 @@ const PARTNER_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
  */
 export function CategoryDrawer({
   categories,
+  signedIn = false,
   variant = "icon",
 }: {
   categories: Category[];
+  /** Swaps the ACCOUNT section between Sign In/Register and account links. */
+  signedIn?: boolean;
   /**
    * "icon" is the mobile hamburger, "bar" the desktop Categories button.
    * The header renders both; only one is visible at a breakpoint, so the two
@@ -185,37 +211,59 @@ export function CategoryDrawer({
               </li>
             </ul>
           ) : (
-            <ul className="p-2">
-              {NAVIGATION.map(({ href, label }) => (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={close}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-ink-soft hover:bg-surface-sunken hover:text-ink"
-                  >
-                    <span className="flex-1">{label}</span>
-                    <ChevronRight size={15} className="shrink-0 text-ink-faint" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="p-2">
+              <ul>
+                {NAVIGATION.map(({ href, label, icon: Icon }) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      onClick={close}
+                      className="flex items-center gap-3 rounded-lg px-3 py-3 text-[15px] text-ink hover:bg-surface-sunken"
+                    >
+                      <Icon size={19} className="shrink-0 text-ink-muted" />
+                      <span className="flex-1">{label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-2 border-t border-line px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                Account
+              </p>
+
+              <ul>
+                {(signedIn ? SIGNED_IN : SIGNED_OUT).map(({ href, label, icon: Icon }) => (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      onClick={close}
+                      className="flex items-center gap-3 rounded-lg px-3 py-3 text-[15px] text-ink hover:bg-surface-sunken"
+                    >
+                      <Icon size={19} className="shrink-0 text-ink-muted" />
+                      <span className="flex-1">{label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
 
-        <div className="shrink-0 border-t border-line bg-surface-sunken/60 p-3">
-          <div className="grid grid-cols-3 gap-2">
-            {PARTNER_LINKS.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={close}
-                className="flex flex-col items-center gap-1.5 rounded-lg border border-line bg-surface px-1 py-2.5 text-center text-[11px] font-semibold leading-tight text-ink-soft transition-colors hover:border-brand-600 hover:text-brand-700"
-              >
-                <Icon size={17} className="text-brand-600" />
-                {label}
-              </Link>
-            ))}
-          </div>
+        {/* Pinned to the bottom of the drawer, full width and stacked, so the
+            three partner routes read as calls to action rather than as three
+            more list items competing with the nav above. */}
+        <div className="shrink-0 space-y-1.5 border-t border-line bg-surface-sunken/60 p-3">
+          {PARTNER_LINKS.map(({ href, label, icon: Icon, tone }) => (
+            <Link
+              key={href}
+              href={href}
+              onClick={close}
+              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 ${tone}`}
+            >
+              <Icon size={16} />
+              {label}
+            </Link>
+          ))}
         </div>
       </nav>
     </div>

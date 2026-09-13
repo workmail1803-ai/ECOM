@@ -46,7 +46,7 @@ export async function Header() {
       </div>
 
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">
-        <CategoryDrawer categories={topLevel} />
+        <CategoryDrawer categories={topLevel} signedIn={Boolean(user)} />
 
         <Link href="/" className="flex shrink-0 flex-col">
           <div className="flex items-baseline gap-1.5">
@@ -90,7 +90,7 @@ export async function Header() {
 
       <nav className="hidden border-t border-line md:block">
         <div className="mx-auto flex h-11 max-w-7xl items-center gap-1 overflow-x-auto px-4">
-          <CategoryDrawer categories={topLevel} variant="bar" />
+          <CategoryDrawer categories={topLevel} signedIn={Boolean(user)} variant="bar" />
           <Link
             href="/products"
             className="shrink-0 rounded-md px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken"

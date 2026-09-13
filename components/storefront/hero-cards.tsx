@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { HeroRail } from "./hero-rail";
 import type { Banner } from "@/types/database";
 
 /**
@@ -41,12 +42,7 @@ export function HeroCards({
           start` snaps to the scroll-port edge and ignores the padding, which
           drags the first card flush against the screen edge on load.
         */}
-        <ul
-          className="
-            rail flex gap-2 overflow-x-auto px-2 pb-0.5
-            scroll-pl-2 sm:px-3 sm:scroll-pl-3
-          "
-        >
+        <HeroRail>
           {banners.map((b, i) => (
             <li
               key={b.id}
@@ -64,13 +60,9 @@ export function HeroCards({
               // From sm: up the widths go back to showing a sliver of the next
               // card, which is the only cue that the row scrolls.
               //
-              // `snap-always` is scroll-snap-stop: always. Snapping alone is
-              // not enough: `scroll-snap-type: x mandatory` picks the nearest
-              // snap point once the fling ends, so a long swipe coasts past
-              // three or four cards and lands wherever momentum died. This
-              // forbids the scroller from passing over a snap point at all,
-              // which makes every swipe advance exactly one card no matter
-              // how hard it is thrown.
+              // `snap-always` (scroll-snap-stop: always) covers wheel and
+              // keyboard scrolling. It is NOT what bounds a touch swipe to one
+              // card — real flings sailed straight past it; HeroRail does that.
               className="
                 flex-none snap-always
                 basis-[calc((100%-0.5rem)/2)]
@@ -81,7 +73,7 @@ export function HeroCards({
               <CampaignCard banner={b} priority={i < 3} />
             </li>
           ))}
-        </ul>
+        </HeroRail>
       </div>
     </section>
   );
