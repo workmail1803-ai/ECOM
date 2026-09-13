@@ -53,6 +53,14 @@ export const getBanners = cache(async () => {
   };
 });
 
+/**
+ * Categories for the homepage grid — the featured ones, capped.
+ *
+ * The full taxonomy is 37 deep, and rendering all of it here produced a
+ * 1300px wall of tiles that pushed the flash sale and every product rail
+ * below the fold. The drawer and /products still list everything; the
+ * homepage shows the ones an admin marked featured and stops at twelve.
+ */
 export const getTopCategories = cache(async (): Promise<Category[]> => {
   const supabase = await createClient();
   const { data } = await supabase
@@ -60,7 +68,9 @@ export const getTopCategories = cache(async (): Promise<Category[]> => {
     .select("*")
     .eq("is_active", true)
     .is("parent_id", null)
-    .order("position");
+    .order("is_featured", { ascending: false })
+    .order("position")
+    .limit(12);
   return (data as unknown as Category[]) ?? [];
 });
 

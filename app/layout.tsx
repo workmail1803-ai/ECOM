@@ -1,24 +1,41 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Sans_Bengali } from "next/font/google";
+import { Sora, Plus_Jakarta_Sans, Hind_Siliguri } from "next/font/google";
 import { Toaster } from "sonner";
 import { getStoreSettings } from "@/lib/queries/settings";
 import "./globals.css";
 
 /**
- * Latin and Bengali are loaded as two families rather than one.
+ * Three faces, each with a job.
  *
- * Inter has no Bengali glyphs, so a promo tile written in Bangla would fall
- * back to whatever the device happens to have — often nothing, which renders
- * as tofu boxes. Listing Noto Sans Bengali after Inter in the same stack means
- * the browser reaches for it only for the codepoints Inter cannot draw.
+ * Sora is the display face — geometric, slightly technical, and it gives
+ * headings and prices a character Inter deliberately does not have. Plus
+ * Jakarta Sans carries body and UI: humanist enough to stay readable at 11px
+ * in a spec table, warmer than Inter at large sizes.
+ *
+ * Hind Siliguri is the Bengali face, and it is not optional. The Latin faces
+ * have no Bengali glyphs, so a promo tile written in Bangla would fall back to
+ * whatever the device happens to have — often nothing, which renders as tofu
+ * boxes. It is designed for Devanagari-family UI rather than adapted from a
+ * print face, so it holds up next to Jakarta at small sizes.
+ *
+ * All three are self-hosted and subset by next/font, so this costs no
+ * render-blocking request to Google and no layout shift.
  */
-const inter = Inter({
+const display = Sora({
   subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const sans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-latin",
   display: "swap",
 });
 
-const bengali = Noto_Sans_Bengali({
+const bengali = Hind_Siliguri({
   subsets: ["bengali"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-bengali",
@@ -58,7 +75,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${bengali.variable}`}>
+    <html lang="en" className={`${sans.variable} ${display.variable} ${bengali.variable}`}>
       <body className="min-h-dvh antialiased">
         {children}
         <Toaster
