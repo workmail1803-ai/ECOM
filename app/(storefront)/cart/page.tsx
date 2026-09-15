@@ -4,6 +4,7 @@ import { ShoppingCart } from "lucide-react";
 import { getCartQuote } from "@/lib/actions/cart";
 import { getDeliveryOptions } from "@/lib/queries/delivery";
 import { getPointsForProducts } from "@/lib/queries/promotions";
+import { getSessionUser } from "@/lib/auth/session";
 import { CartView } from "@/components/cart/cart-view";
 import { EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,10 @@ export const metadata: Metadata = { title: "Your cart" };
 export const dynamic = "force-dynamic";
 
 export default async function CartPage() {
-  const [quote, deliveryOptions] = await Promise.all([
+  const [quote, deliveryOptions, user] = await Promise.all([
     getCartQuote(),
     getDeliveryOptions(),
+    getSessionUser(),
   ]);
 
   // Points per unit for whatever is in the cart. One query, only for the
@@ -52,6 +54,7 @@ export default async function CartPage() {
         initialQuote={quote}
         deliveryOptions={deliveryOptions}
         pointsByProduct={pointsByProduct}
+        signedIn={Boolean(user)}
       />
     </div>
   );

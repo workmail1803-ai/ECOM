@@ -33,11 +33,14 @@ export function CartView({
   initialQuote,
   deliveryOptions,
   pointsByProduct,
+  signedIn,
 }: {
   initialQuote: CartQuote;
   deliveryOptions: DeliveryOption[];
   /** product id → points per unit, for the "you will earn" line. */
   pointsByProduct: Record<string, number>;
+  /** Decides whether points are promised outright or held for a number. */
+  signedIn: boolean;
 }) {
   const [quote, setQuote] = useState(initialQuote);
 
@@ -306,8 +309,17 @@ export function CartView({
           {pointsEarned > 0 ? (
             <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
               <Sparkles size={13} className="shrink-0" />
-              Earn {pointsEarned.toLocaleString()} points when this order is
-              delivered
+              {signedIn ? (
+                <>
+                  Earn {pointsEarned.toLocaleString()} points when this order is
+                  delivered
+                </>
+              ) : (
+                <>
+                  Earn {pointsEarned.toLocaleString()} points — held for your
+                  mobile number, and yours once you sign in with it
+                </>
+              )}
             </p>
           ) : null}
 

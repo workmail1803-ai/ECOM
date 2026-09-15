@@ -71,6 +71,12 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
     await clearGuestToken();
   }
 
+  // Collect anything a guest order earned against this number. The profile
+  // trigger covers sign-up and phone edits, but not the common case of an
+  // existing customer who checked out without signing in. Safe to call every
+  // time: already-claimed rows are skipped.
+  await supabase.rpc("claim_pending_points");
+
   revalidatePath("/", "layout");
   redirect(parsed.data.next || "/account");
 }
