@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Truck, ShieldCheck, RotateCcw, Check } from "lucide-react";
+import { Truck, ShieldCheck, RotateCcw, Check, Sparkles } from "lucide-react";
 import {
   getProductBySlug,
   getRelatedProducts,
@@ -199,6 +199,17 @@ export default async function ProductPage({
             lowStockThreshold={settings.low_stock_banner_threshold}
             signedIn={Boolean(user)}
           />
+
+          {/* What this purchase is worth back. Shown next to the price because
+              that is where the value judgement happens, not at checkout after
+              the decision is made. */}
+          {product.points_per_purchase > 0 ? (
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1.5 text-xs font-medium text-brand-700">
+              <Sparkles size={13} />
+              Earn {product.points_per_purchase.toLocaleString()} points with this
+              item
+            </p>
+          ) : null}
 
           <ProductOffers
             breaks={breaks}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Minus, Plus, Trash2, Tag, X, AlertTriangle, ArrowRight, Layers } from "lucide-react";
+import { Minus, Plus, Trash2, Tag, X, AlertTriangle, ArrowRight, Layers, Sparkles } from "lucide-react";
 import type { CartQuote } from "@/lib/pricing/types";
 import { COUPON_ERROR_MESSAGE, LINE_ISSUE_MESSAGE } from "@/lib/pricing/types";
 import {
@@ -32,11 +32,24 @@ import type { DeliveryOption } from "@/components/checkout/delivery-options";
 export function CartView({
   initialQuote,
   deliveryOptions,
+  pointsByProduct,
 }: {
   initialQuote: CartQuote;
   deliveryOptions: DeliveryOption[];
+  /** product id → points per unit, for the "you will earn" line. */
+  pointsByProduct: Record<string, number>;
 }) {
   const [quote, setQuote] = useState(initialQuote);
+
+  /*
+   * Display only, and deliberately from the same per-unit figure the order
+   * stores: what is shown here is what place_order will snapshot, so the
+   * promise in the cart matches the points that actually land.
+   */
+  const pointsEarned = quote.lines.reduce(
+    (sum, l) => sum + (pointsByProduct[l.product_id] ?? 0) * l.quantity,
+    0,
+  );
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [couponPending, startCoupon] = useTransition();
@@ -287,6 +300,16 @@ export function CartView({
               </dd>
             </div>
           </dl>
+
+          {/* Points the whole basket earns, once it is delivered. Summed from
+              the same per-line figure place_order snapshots onto the order. */}
+          {pointsEarned > 0 ? (
+            <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-brand-50 px-3 py-2 text-xs font-medium text-brand-700">
+              <Sparkles size={13} className="shrink-0" />
+              Earn {pointsEarned.toLocaleString()} points when this order is
+              delivered
+            </p>
+          ) : null}
 
           <DeliveryPicker options={deliveryOptions} />
 

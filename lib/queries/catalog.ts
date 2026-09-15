@@ -21,7 +21,8 @@ import type {
 export const PRODUCT_CARD_COLUMNS =
   "id, name, slug, sku, price_paisa, compare_at_paisa, stock, thumbnail_url, " +
   "status, is_featured, is_new_arrival, is_best_seller, rating_sum, rating_count, " +
-  "units_sold, published_at, category_id, brand_id, short_description, low_stock_threshold";
+  "units_sold, published_at, category_id, brand_id, short_description, low_stock_threshold, " +
+  "points_per_purchase";
 
 const PRODUCT_DETAIL_COLUMNS =
   PRODUCT_CARD_COLUMNS +
@@ -49,6 +50,7 @@ export type ProductCard = Pick<
   | "brand_id"
   | "short_description"
   | "low_stock_threshold"
+  | "points_per_purchase"
 >;
 
 /** Average rating from the maintained rollup, or null when unrated. */

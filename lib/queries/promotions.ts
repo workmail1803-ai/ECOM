@@ -128,3 +128,29 @@ export const getBundlesForProduct = cache(
       .filter((b) => b.products.length > 1);
   },
 );
+
+/**
+ * Points per unit for a set of products.
+ *
+ * Read from `products`, which is the same source place_order snapshots onto
+ * the order line — so the figure the cart promises is the figure that lands.
+ */
+export const getPointsForProducts = cache(
+  async (productIds: string[]): Promise<Record<string, number>> => {
+    const ids = [...new Set(productIds)].filter(Boolean);
+    if (ids.length === 0) return {};
+
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("products")
+      .select("id, points_per_purchase")
+      .in("id", ids);
+
+    return Object.fromEntries(
+      ((data ?? []) as { id: string; points_per_purchase: number }[]).map((p) => [
+        p.id,
+        p.points_per_purchase ?? 0,
+      ]),
+    );
+  },
+);
