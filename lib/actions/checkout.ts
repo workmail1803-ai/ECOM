@@ -78,6 +78,10 @@ export async function placeOrder(
     p_address_id: input.address_id || null,
     p_guest_token: guestToken,
     p_save_address: input.save_address ?? false,
+    // A boolean intent, not an amount. What the advance actually comes to is
+    // decided by place_order from the settings rule — the client never names
+    // a figure it would like to pay.
+    p_partial_payment: input.partial_payment === "on",
   });
 
   if (error) {
@@ -88,6 +92,8 @@ export async function placeOrder(
     order_id: string;
     order_number: string;
     total_paisa: number;
+    advance_paisa: number;
+    due_on_delivery_paisa: number;
     payment_method: string;
   };
 

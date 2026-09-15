@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import * as Icons from "lucide-react";
-import { Truck, Tag, ShieldCheck, Info, type LucideIcon } from "lucide-react";
+import { Truck, Tag, ShieldCheck, Info, X, type LucideIcon } from "lucide-react";
 import type { Address } from "@/types/database";
 import type { CartQuote } from "@/lib/pricing/types";
 import type { PaymentOption } from "@/lib/payments";
@@ -20,6 +20,7 @@ import {
   styleFor,
   type DeliveryOption,
 } from "@/components/checkout/delivery-options";
+import { applyCoupon } from "@/lib/actions/cart";
 
 const initial: CheckoutState = { ok: false };
 
@@ -45,6 +46,7 @@ export function CheckoutForm({
   codAdvanceThresholdPaisa,
   deliveryOptions,
   showroomAddress,
+  advance,
 }: {
   initialQuote: CartQuote;
   addresses: Address[];
@@ -57,6 +59,8 @@ export function CheckoutForm({
   deliveryOptions: DeliveryOption[];
   /** Used as the address of record when the customer collects in person. */
   showroomAddress: string;
+  /** The advance rule, so the figure can be shown before the order is placed. */
+  advance: { enabled: boolean; percent: number; minPaisa: number };
 }) {
   const [state, action, pending] = useActionState(placeOrder, initial);
 
@@ -85,8 +89,32 @@ export function CheckoutForm({
 
   const isPickup = zoneSlug === "office-pickup";
   const chosenZone = deliveryOptions.find((o) => o.slug === zoneSlug) ?? null;
+
   const [quote, setQuote] = useState(initialQuote);
   const [method, setMethod] = useState<string>(paymentOptions[0]?.id ?? "cod");
+  const [plan, setPlan] = useState<"full" | "partial">("full");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponPending, startCoupon] = useTransition();
+
+  const submitCheckoutCoupon = (code: string) =>
+    startCoupon(async () => {
+      const result = await applyCoupon(code, district || null);
+      if (result.quote.cart_id) setQuote(result.quote);
+    });
+
+  /*
+   * Display only. place_order recomputes this from the settings rule and
+   * ignores anything the client thought it should be — this exists so the
+   * customer can see the number before committing, not to decide it.
+   */
+  const advanceNowPaisa = Math.min(
+    quote.total_paisa,
+    Math.max(
+      advance.minPaisa,
+      Math.round((quote.subtotal_paisa * advance.percent) / 100) +
+        quote.delivery_fee_paisa,
+    ),
+  );
   const [, startQuote] = useTransition();
 
   // Re-quote whenever the district changes so the delivery fee is real.
@@ -473,6 +501,68 @@ export function CheckoutForm({
         <section className="rounded-xl border border-line bg-surface p-5">
           <h2 className="text-base font-semibold text-ink">Payment method</h2>
 
+          {/*
+            Full or partial. Only offered on a prepaid method: "pay 10% now"
+            is meaningless when the whole thing is already collected at the
+            door, so choosing cash on delivery hides it rather than showing a
+            control that silently does nothing.
+          */}
+          {advance.enabled && method !== "cod" ? (
+            <>
+              <div className="mt-3 flex flex-wrap gap-4">
+                {([
+                  ["full", "Full Payment"],
+                  ["partial", `Partial Payment (${advance.percent}%)`],
+                ] as const).map(([value, label]) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 text-sm text-ink"
+                  >
+                    <input
+                      type="radio"
+                      name="payment_plan"
+                      value={value}
+                      checked={plan === value}
+                      onChange={() => setPlan(value)}
+                      className="size-4 accent-brand-600"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+
+              {/* The form posts a checkbox-style value; the radios above are
+                  the visible control. */}
+              {plan === "partial" ? (
+                <input type="hidden" name="partial_payment" value="on" />
+              ) : null}
+
+              {plan === "partial" ? (
+                <div className="mt-3 rounded-lg border border-brand-600/15 bg-brand-50/60 p-3 text-sm">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="font-semibold text-brand-700">Pay now:</span>
+                    <span className="text-base font-bold tabular text-brand-700">
+                      {formatTaka(advanceNowPaisa)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    Remaining{" "}
+                    <strong className="font-semibold tabular">
+                      {formatTaka(quote.total_paisa - advanceNowPaisa)}
+                    </strong>{" "}
+                    to the courier on delivery.
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-4 text-ink-muted">
+                    {advance.percent}% of the subtotal plus the full delivery
+                    charge, and never less than {formatTaka(advance.minPaisa)}.
+                    We pay the courier in full either way, which is why delivery
+                    is not split.
+                  </p>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
           <div className="mt-3 space-y-2">
             {paymentOptions.map((o) => {
               const Icon =
@@ -559,6 +649,64 @@ export function CheckoutForm({
               </li>
             ))}
           </ul>
+
+          {/*
+            A second entry point for the code, because this is where people
+            remember they have one. It re-quotes through the same SQL the cart
+            uses, so a code applied here is validated identically.
+          */}
+          <div className="mt-4 border-t border-line pt-4">
+            {quote.coupon ? (
+              <div className="flex items-center justify-between rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-sm">
+                <span className="flex items-center gap-1.5 font-medium text-success">
+                  <Tag size={14} />
+                  {quote.coupon.code}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => submitCheckoutCoupon("")}
+                  disabled={couponPending}
+                  className="text-success/70 hover:text-success"
+                  aria-label="Remove coupon"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="Coupon code"
+                  aria-label="Coupon code"
+                  className="h-9 text-sm uppercase"
+                  /* Enter must not submit the order. */
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (couponCode.trim()) submitCheckoutCoupon(couponCode.trim());
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={couponPending}
+                  disabled={!couponCode.trim()}
+                  onClick={() => submitCheckoutCoupon(couponCode.trim())}
+                >
+                  Apply
+                </Button>
+              </div>
+            )}
+
+            {quote.coupon_error ? (
+              <p role="alert" className="mt-1.5 text-xs text-danger">
+                That code cannot be used on this order.
+              </p>
+            ) : null}
+          </div>
 
           <dl className="mt-4 space-y-2.5 border-t border-line pt-4 text-sm">
             <div className="flex justify-between">

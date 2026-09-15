@@ -57,6 +57,8 @@ export const checkoutSchema = z.object({
   payment_method: paymentMethodSchema,
   customer_note: z.string().trim().max(500).optional().or(z.literal("")),
   address_id: z.string().uuid().optional().or(z.literal("")),
+  /** "on" when the customer chose to pay only the advance now. */
+  partial_payment: z.enum(["on"]).optional(),
   save_address: z.coerce.boolean().optional().default(false),
 });
 

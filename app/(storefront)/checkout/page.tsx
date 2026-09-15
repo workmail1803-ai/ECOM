@@ -8,6 +8,7 @@ import { paymentOptions } from "@/lib/payments";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import type { Address } from "@/types/database";
 import { getDeliveryOptions } from "@/lib/queries/delivery";
+import { getAdvanceRule } from "@/lib/queries/advance";
 
 export const metadata: Metadata = { title: "Checkout", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -20,10 +21,11 @@ export default async function CheckoutPage() {
   if (quote.lines.length === 0) redirect("/cart");
   if (quote.has_blocking_issue) redirect("/cart");
 
-  const [user, settings, deliveryOptions] = await Promise.all([
+  const [user, settings, deliveryOptions, advance] = await Promise.all([
     getSessionUser(),
     getStoreSettings(),
     getDeliveryOptions(),
+    getAdvanceRule(),
   ]);
 
   let addresses: Address[] = [];
@@ -57,6 +59,7 @@ export default async function CheckoutPage() {
         codAdvanceThresholdPaisa={settings.cod_advance_threshold_paisa}
         deliveryOptions={deliveryOptions}
         showroomAddress={settings.showroom_address}
+        advance={advance}
       />
     </div>
   );
