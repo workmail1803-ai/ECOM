@@ -8,7 +8,7 @@ import { Input, Field } from "@/components/ui/field";
 
 const initial: AuthState = { ok: false };
 
-export function SignUpForm() {
+export function SignUpForm({ referralCode = "" }: { referralCode?: string }) {
   const [state, action, pending] = useActionState(signUp, initial);
 
   // Email confirmation is on for this project — there is no session yet.
@@ -23,6 +23,12 @@ export function SignUpForm() {
 
   return (
     <form action={action} className="mt-6 space-y-4">
+      {/* Carried from ?ref= on the invite link. Validated server-side by
+          claim_referral, which ignores anything it does not recognise. */}
+      {referralCode ? (
+        <input type="hidden" name="ref" value={referralCode} />
+      ) : null}
+
       <Field
         label="Full name"
         htmlFor="full_name"

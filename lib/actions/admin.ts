@@ -921,3 +921,123 @@ export async function resetSiteTheme(): Promise<AdminState> {
   revalidatePath("/admin/design");
   return { ok: true, message: "Design reset to the defaults." };
 }
+
+// ── Promotions ──────────────────────────────────────────────────────────────
+
+/**
+ * Create a quantity break ("buy N, save X%").
+ *
+ * Scoped to one product OR one category, never both — the table enforces that,
+ * and quote_cart resolves a product rule ahead of a category rule.
+ */
+export async function saveQuantityBreak(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requirePermission("coupons");
+
+  const scope = String(formData.get("scope") ?? "product");
+  const targetId = String(formData.get("target_id") ?? "");
+  const minQuantity = Number(formData.get("min_quantity"));
+  const percent = Number(formData.get("discount_percent"));
+
+  if (!targetId) return { ok: false, error: "Choose a product or category." };
+  if (!Number.isInteger(minQuantity) || minQuantity < 2) {
+    return { ok: false, error: "Minimum quantity must be 2 or more." };
+  }
+  if (!(percent > 0 && percent <= 90)) {
+    return { ok: false, error: "Discount must be between 1 and 90 percent." };
+  }
+
+  const db = createAdminClient();
+  const { error } = await db.from("quantity_breaks").insert({
+    product_id: scope === "product" ? targetId : null,
+    category_id: scope === "category" ? targetId : null,
+    min_quantity: minQuantity,
+    discount_percent: percent,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false, error: "That quantity already has a rule here." };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Quantity break added." };
+}
+
+export async function deleteQuantityBreak(id: string): Promise<AdminState> {
+  await requirePermission("coupons");
+  const db = createAdminClient();
+  const { error } = await db.from("quantity_breaks").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Removed." };
+}
+
+/** Create a bundle from two or more products. */
+export async function saveBundle(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requirePermission("coupons");
+
+  const name = String(formData.get("name") ?? "").trim();
+  const percent = Number(formData.get("discount_percent"));
+  const productIds = formData.getAll("product_ids").map(String).filter(Boolean);
+
+  if (name.length < 2) return { ok: false, error: "Give the bundle a name." };
+  // One product is not a bundle; it is a quantity break.
+  if (productIds.length < 2) {
+    return { ok: false, error: "Pick at least two products." };
+  }
+  if (!(percent > 0 && percent <= 90)) {
+    return { ok: false, error: "Discount must be between 1 and 90 percent." };
+  }
+
+  const db = createAdminClient();
+  const slug =
+    slugify(name) + "-" + Math.random().toString(36).slice(2, 6);
+
+  const { data: bundle, error } = await db
+    .from("bundles")
+    .insert({ slug, name, discount_percent: percent })
+    .select("id")
+    .single();
+
+  if (error || !bundle) return { ok: false, error: error?.message ?? "Could not save." };
+
+  const { error: itemsError } = await db.from("bundle_items").insert(
+    [...new Set(productIds)].map((product_id) => ({
+      bundle_id: (bundle as { id: string }).id,
+      product_id,
+    })),
+  );
+
+  if (itemsError) {
+    // A bundle with no members would silently never fire, so do not leave one.
+    await db.from("bundles").delete().eq("id", (bundle as { id: string }).id);
+    return { ok: false, error: itemsError.message };
+  }
+
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Bundle created." };
+}
+
+export async function deleteBundle(id: string): Promise<AdminState> {
+  await requirePermission("coupons");
+  const db = createAdminClient();
+  // bundle_items cascades on the foreign key.
+  const { error } = await db.from("bundles").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/promotions");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Bundle removed." };
+}

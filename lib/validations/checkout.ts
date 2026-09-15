@@ -59,6 +59,8 @@ export const checkoutSchema = z.object({
   address_id: z.string().uuid().optional().or(z.literal("")),
   /** "on" when the customer chose to pay only the advance now. */
   partial_payment: z.enum(["on"]).optional(),
+  /** "on" when the customer chose to spend their store credit. */
+  use_credit: z.enum(["on"]).optional(),
   save_address: z.coerce.boolean().optional().default(false),
 });
 

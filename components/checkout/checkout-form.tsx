@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import * as Icons from "lucide-react";
-import { Truck, Tag, ShieldCheck, Info, X, type LucideIcon } from "lucide-react";
+import { Truck, Tag, ShieldCheck, Info, X, Layers, Wallet, type LucideIcon } from "lucide-react";
 import type { Address } from "@/types/database";
 import type { CartQuote } from "@/lib/pricing/types";
 import type { PaymentOption } from "@/lib/payments";
@@ -47,6 +47,7 @@ export function CheckoutForm({
   deliveryOptions,
   showroomAddress,
   advance,
+  creditPaisa,
 }: {
   initialQuote: CartQuote;
   addresses: Address[];
@@ -61,6 +62,8 @@ export function CheckoutForm({
   showroomAddress: string;
   /** The advance rule, so the figure can be shown before the order is placed. */
   advance: { enabled: boolean; percent: number; minPaisa: number };
+  /** Spendable store credit. Zero for guests and for anyone with none. */
+  creditPaisa: number;
 }) {
   const [state, action, pending] = useActionState(placeOrder, initial);
 
@@ -93,6 +96,7 @@ export function CheckoutForm({
   const [quote, setQuote] = useState(initialQuote);
   const [method, setMethod] = useState<string>(paymentOptions[0]?.id ?? "cod");
   const [plan, setPlan] = useState<"full" | "partial">("full");
+  const [useCredit, setUseCredit] = useState(creditPaisa > 0);
   const [couponCode, setCouponCode] = useState("");
   const [couponPending, startCoupon] = useTransition();
 
@@ -502,6 +506,35 @@ export function CheckoutForm({
           <h2 className="text-base font-semibold text-ink">Payment method</h2>
 
           {/*
+            Credit settles part of the order before anything else is collected,
+            so it belongs above the method rather than beside the total. The
+            amount actually applied is decided by place_order from the ledger —
+            this checkbox is an intent, not a figure.
+          */}
+          {creditPaisa > 0 ? (
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-success/20 bg-success-soft p-3">
+              <input
+                type="checkbox"
+                name="use_credit"
+                checked={useCredit}
+                onChange={(e) => setUseCredit(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-success"
+              />
+              <span className="text-sm">
+                <span className="flex items-center gap-1.5 font-medium text-success">
+                  <Wallet size={14} />
+                  Use my {formatTaka(creditPaisa)} credit
+                </span>
+                <span className="mt-0.5 block text-xs text-success/80">
+                  {creditPaisa >= quote.total_paisa
+                    ? "Covers this order in full."
+                    : `Leaves ${formatTaka(quote.total_paisa - creditPaisa)} to pay.`}
+                </span>
+              </span>
+            </label>
+          ) : null}
+
+          {/*
             Full or partial. Only offered on a prepaid method: "pay 10% now"
             is meaningless when the whole thing is already collected at the
             door, so choosing cash on delivery hides it rather than showing a
@@ -715,6 +748,18 @@ export function CheckoutForm({
                 {formatTaka(quote.subtotal_paisa)}
               </dd>
             </div>
+
+            {quote.promo_discount_paisa > 0 ? (
+              <div className="flex justify-between">
+                <dt className="flex items-center gap-1 text-success">
+                  <Layers size={13} />
+                  Offers
+                </dt>
+                <dd className="tabular font-medium text-success">
+                  −{formatTaka(quote.promo_discount_paisa)}
+                </dd>
+              </div>
+            ) : null}
 
             {quote.discount_paisa > 0 ? (
               <div className="flex justify-between">

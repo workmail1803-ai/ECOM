@@ -7,9 +7,9 @@ export const metadata: Metadata = { title: "Create an account" };
 export default async function SignUpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; ref?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, ref } = await searchParams;
 
   return (
     <div className="rounded-xl border border-line bg-surface p-6 shadow-card">
@@ -18,7 +18,7 @@ export default async function SignUpPage({
         Faster checkout, order history and a wishlist that follows you.
       </p>
 
-      <SignUpForm />
+      <SignUpForm referralCode={ref ?? ""} />
 
       <p className="mt-5 border-t border-line pt-4 text-center text-sm text-ink-muted">
         Already have an account?{" "}

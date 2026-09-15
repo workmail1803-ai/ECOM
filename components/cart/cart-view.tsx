@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Minus, Plus, Trash2, Tag, X, AlertTriangle, ArrowRight } from "lucide-react";
+import { Minus, Plus, Trash2, Tag, X, AlertTriangle, ArrowRight, Layers } from "lucide-react";
 import type { CartQuote } from "@/lib/pricing/types";
 import { COUPON_ERROR_MESSAGE, LINE_ISSUE_MESSAGE } from "@/lib/pricing/types";
 import {
@@ -249,6 +249,18 @@ export function CartView({
                 {formatTaka(quote.subtotal_paisa)}
               </dd>
             </div>
+
+            {quote.promo_discount_paisa > 0 ? (
+              <div className="flex justify-between">
+                <dt className="flex items-center gap-1 text-success">
+                  <Layers size={13} />
+                  Offers
+                </dt>
+                <dd className="tabular font-medium text-success">
+                  −{formatTaka(quote.promo_discount_paisa)}
+                </dd>
+              </div>
+            ) : null}
 
             {quote.discount_paisa > 0 ? (
               <div className="flex justify-between">

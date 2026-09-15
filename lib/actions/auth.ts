@@ -28,6 +28,8 @@ const signUpSchema = z.object({
     .string()
     .min(8, "Use at least 8 characters")
     .max(72, "Passwords are limited to 72 characters"),
+  /** From ?ref= on the sign-up link. Optional and never trusted. */
+  ref: z.string().trim().max(12).optional().or(z.literal("")),
 });
 
 function fieldErrorsOf(error: z.ZodError): Record<string, string> {
@@ -100,6 +102,13 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
       ok: true,
       message: "Check your inbox — we sent you a link to confirm your address.",
     };
+  }
+
+  // Attribute the referral now that there is a session to attribute it to.
+  // claim_referral is deliberately quiet: an unknown, self-owned or
+  // already-used code is not something to interrupt a new customer with.
+  if (parsed.data.ref) {
+    await supabase.rpc("claim_referral", { p_code: parsed.data.ref });
   }
 
   const guestToken = await readGuestToken();

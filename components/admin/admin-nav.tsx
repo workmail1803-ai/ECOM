@@ -16,6 +16,7 @@ import {
   BarChart3,
   Settings,
   Palette,
+  Layers,
   Menu,
   X,
   CreditCard,
@@ -66,6 +67,7 @@ const SECTIONS: {
     title: "Marketing",
     links: [
       { href: "/admin/coupons", label: "Coupons", icon: Ticket, permission: "coupons" },
+      { href: "/admin/promotions", label: "Promotions", icon: Layers, permission: "coupons" },
       { href: "/admin/banners", label: "Banners", icon: ImageIcon, permission: "banners" },
       { href: "/admin/reviews", label: "Reviews", icon: Star, permission: "reviews" },
     ],

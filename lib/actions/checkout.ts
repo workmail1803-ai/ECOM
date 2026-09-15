@@ -82,6 +82,7 @@ export async function placeOrder(
     // decided by place_order from the settings rule — the client never names
     // a figure it would like to pay.
     p_partial_payment: input.partial_payment === "on",
+    p_use_credit: input.use_credit === "on",
   });
 
   if (error) {
@@ -93,6 +94,7 @@ export async function placeOrder(
     order_number: string;
     total_paisa: number;
     advance_paisa: number;
+    credit_applied_paisa: number;
     due_on_delivery_paisa: number;
     payment_method: string;
   };

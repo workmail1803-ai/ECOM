@@ -73,6 +73,9 @@ export interface CartQuote {
   subtotal_paisa: number;
   discount_paisa: number;
   delivery_fee_paisa: number;
+  /** Savings from quantity breaks and bundles, already deducted above. */
+  promo_discount_paisa: number;
+  promotions: { kind: string; label: string; product_name: string | null; amount_paisa: number }[];
   /** Always equals subtotal - discount + delivery. Enforced by a CHECK on orders. */
   total_paisa: number;
   coupon: QuoteCoupon | null;
@@ -92,6 +95,8 @@ export const EMPTY_QUOTE: CartQuote = {
   subtotal_paisa: 0,
   discount_paisa: 0,
   delivery_fee_paisa: 0,
+  promo_discount_paisa: 0,
+  promotions: [],
   total_paisa: 0,
   coupon: null,
   coupon_code_attempted: null,

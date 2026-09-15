@@ -10,6 +10,8 @@ import {
 } from "@/lib/queries/catalog";
 import { getStoreSettings } from "@/lib/queries/settings";
 import { getDeliveryOptions } from "@/lib/queries/delivery";
+import { getQuantityBreaks, getBundlesForProduct } from "@/lib/queries/promotions";
+import { ProductOffers } from "@/components/product/offers";
 import { DeliveryOptionCards } from "@/components/checkout/delivery-options";
 import { getSessionUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -53,12 +55,14 @@ export default async function ProductPage({
 
   if (!product || product.status !== "active") notFound();
 
-  const [related, reviews, settings, deliveryOptions, user] = await Promise.all([
+  const [related, reviews, settings, deliveryOptions, user, breaks, bundles] = await Promise.all([
     getRelatedProducts(product),
     getProductReviews(product.id),
     getStoreSettings(),
     getDeliveryOptions(),
     getSessionUser(),
+    getQuantityBreaks(product.id, product.category_id),
+    getBundlesForProduct(product.id),
   ]);
 
   // Has this customer bought and received it? Gates the review form, and RLS
@@ -194,6 +198,13 @@ export default async function ProductPage({
             variants={product.variants}
             lowStockThreshold={settings.low_stock_banner_threshold}
             signedIn={Boolean(user)}
+          />
+
+          <ProductOffers
+            breaks={breaks}
+            bundles={bundles}
+            unitPricePaisa={product.price_paisa}
+            productId={product.id}
           />
 
           {/* Shipping options up front, priced. A shopper deciding whether to
