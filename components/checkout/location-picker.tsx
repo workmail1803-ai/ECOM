@@ -9,6 +9,15 @@ import {
 } from "@/lib/actions/geocode";
 import { Button } from "@/components/ui/button";
 
+/*
+ * Leaflet ships its own stylesheet and does not work without it: `.leaflet-tile`
+ * relies on it for `position: absolute`, and with no CSS the tiles fall back to
+ * normal inline layout and scatter diagonally across the container instead of
+ * forming a map. Imported here rather than globally so it only loads on pages
+ * that actually render a map.
+ */
+import "leaflet/dist/leaflet.css";
+
 export interface PickedLocation {
   lat: number;
   lng: number;
@@ -20,6 +29,25 @@ export interface PickedLocation {
 
 /** Dhaka, used only as the map's opening view before a pin exists. */
 const DEFAULT_CENTER: [number, number] = [23.8103, 90.4125];
+
+/**
+ * Bangladesh's bounding box, slightly generous at the edges.
+ *
+ * Used to reject a pin the shop cannot deliver to. A box is crude — it
+ * includes slivers of neighbouring states — but it is honest about what it
+ * does, needs no extra service, and the failure it prevents (a courier order
+ * to another country) is the one that matters.
+ */
+const BD_BOUNDS = { minLat: 20.3, maxLat: 26.7, minLng: 88.0, maxLng: 92.7 };
+
+function inBangladesh(lat: number, lng: number): boolean {
+  return (
+    lat >= BD_BOUNDS.minLat &&
+    lat <= BD_BOUNDS.maxLat &&
+    lng >= BD_BOUNDS.minLng &&
+    lng <= BD_BOUNDS.maxLng
+  );
+}
 
 /**
  * "Use my location" — GPS, a draggable pin, and a written address.
@@ -72,6 +100,21 @@ export function LocationPicker({
   // Set the pin and ask what is there. Failure to geocode is not failure to
   // pick: the coordinates are kept either way.
   const place = (lat: number, lng: number) => {
+    /*
+     * A pin outside Bangladesh is not a delivery address, it is a bad fix — a
+     * VPN, a desktop with no GPS, or a phone that located itself off a foreign
+     * network. Accepting one silently selected "Outside Dhaka, tk 100", which
+     * quietly promises to deliver somewhere we do not.
+     */
+    if (!inBangladesh(lat, lng)) {
+      setStatus(
+        "That location is outside Bangladesh, so we cannot deliver to it. " +
+          "Search for your address above, or drag the pin to it.",
+      );
+      setOpen(true);
+      return;
+    }
+
     startResolve(async () => {
       const r = await reverseGeocode(lat, lng);
       onChange({

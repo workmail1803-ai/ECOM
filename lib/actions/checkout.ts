@@ -36,6 +36,27 @@ function placeOrderError(message: string): string {
   return "We could not place your order. Please try again.";
 }
 
+/**
+ * Bangladesh's bounding box. A pin outside it is a bad fix — a VPN, or a
+ * desktop locating itself off a foreign network — not somewhere we deliver.
+ */
+function withinDelivery(
+  lat: number | undefined,
+  lng: number | undefined,
+): { lat: number | null; lng: number | null } {
+  if (
+    typeof lat !== "number" ||
+    typeof lng !== "number" ||
+    lat < 20.3 ||
+    lat > 26.7 ||
+    lng < 88.0 ||
+    lng > 92.7
+  ) {
+    return { lat: null, lng: null };
+  }
+  return { lat, lng };
+}
+
 export async function placeOrder(
   _prev: CheckoutState,
   formData: FormData,
@@ -59,6 +80,8 @@ export async function placeOrder(
   if (!provider) {
     return { ok: false, error: "That payment method is not available right now." };
   }
+
+  const pin = withinDelivery(input.lat, input.lng);
 
   const supabase = await createClient();
   const { cartId, guestToken } = await getOrCreateCartId();
@@ -87,9 +110,14 @@ export async function placeOrder(
     p_redeem_points: input.redeem_points === "on",
     // Null rather than undefined: the RPC needs the argument present so the
     // one signature resolves, and null is what "no pin" means in the column.
-    p_lat: input.lat ?? null,
-    p_lng: input.lng ?? null,
-    p_place_label: input.place_label || null,
+    //
+    // Re-checked here as well as in the picker, because a form post can carry
+    // anything. A pin outside Bangladesh is dropped rather than rejected: the
+    // written address is what the courier uses, so a bad coordinate should
+    // not cost the customer their order.
+    p_lat: pin.lat,
+    p_lng: pin.lng,
+    p_place_label: pin.lat === null ? null : input.place_label || null,
   });
 
   if (error) {
