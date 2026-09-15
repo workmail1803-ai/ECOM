@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import * as Icons from "lucide-react";
-import { Truck, Tag, ShieldCheck, Info, X, Layers, Wallet, type LucideIcon } from "lucide-react";
+import { Truck, Tag, ShieldCheck, Info, X, Layers, Wallet, Clock, type LucideIcon } from "lucide-react";
 import type { Address } from "@/types/database";
 import type { CartQuote } from "@/lib/pricing/types";
 import type { PaymentOption } from "@/lib/payments";
@@ -21,6 +21,7 @@ import {
   type DeliveryOption,
 } from "@/components/checkout/delivery-options";
 import { applyCoupon } from "@/lib/actions/cart";
+import { CreditAccountOption } from "./credit-account";
 
 const initial: CheckoutState = { ok: false };
 
@@ -48,6 +49,7 @@ export function CheckoutForm({
   showroomAddress,
   advance,
   creditPaisa,
+  paymentWindowMinutes,
 }: {
   initialQuote: CartQuote;
   addresses: Address[];
@@ -62,6 +64,8 @@ export function CheckoutForm({
   showroomAddress: string;
   /** The advance rule, so the figure can be shown before the order is placed. */
   advance: { enabled: boolean; percent: number; minPaisa: number };
+  /** Minutes a prepaid order may sit unpaid before it is cancelled. */
+  paymentWindowMinutes: number;
   /** Spendable store credit. Zero for guests and for anyone with none. */
   creditPaisa: number;
 }) {
@@ -97,6 +101,7 @@ export function CheckoutForm({
   const [method, setMethod] = useState<string>(paymentOptions[0]?.id ?? "cod");
   const [plan, setPlan] = useState<"full" | "partial">("full");
   const [useCredit, setUseCredit] = useState(creditPaisa > 0);
+  const [phone, setPhone] = useState(defaultPhone);
   const [couponCode, setCouponCode] = useState("");
   const [couponPending, startCoupon] = useTransition();
 
@@ -596,6 +601,17 @@ export function CheckoutForm({
             </>
           ) : null}
 
+          {/* Prepaid orders are held, not reserved forever: unpaid ones are
+              cancelled and the stock goes back. Saying so here is fairer than
+              letting the cancellation be a surprise. */}
+          {method !== "cod" ? (
+            <p className="mt-3 flex items-start gap-1.5 rounded-lg border border-warning/20 bg-warning-soft px-3 py-2 text-xs leading-5 text-warning">
+              <Clock size={13} className="mt-0.5 shrink-0" />
+              Pay within {paymentWindowMinutes} minutes of placing the order, or
+              it is cancelled automatically and the items go back on sale.
+            </p>
+          ) : null}
+
           <div className="mt-3 space-y-2">
             {paymentOptions.map((o) => {
               const Icon =
@@ -644,6 +660,8 @@ export function CheckoutForm({
               credentials are configured.
             </p>
           ) : null}
+
+          <CreditAccountOption phone={phone} orderTotalPaisa={quote.total_paisa} />
         </section>
       </div>
 

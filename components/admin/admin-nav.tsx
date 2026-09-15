@@ -76,6 +76,7 @@ const SECTIONS: {
     title: "Insight",
     links: [
       { href: "/admin/reports", label: "Reports", icon: BarChart3, permission: "reports" },
+      { href: "/admin/credit", label: "Credit accounts", icon: CreditCard, permission: "settings" },
       { href: "/admin/staff", label: "Staff", icon: ShieldCheck, permission: "staff" },
       { href: "/admin/design", label: "Design", icon: Palette, permission: "settings" },
       { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings" },

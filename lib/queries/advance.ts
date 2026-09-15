@@ -39,3 +39,24 @@ export const getAdvanceRule = cache(async (): Promise<AdvanceRule> => {
     minPaisa: Number.isFinite(minPaisa) && minPaisa >= 0 ? minPaisa : 20000,
   };
 });
+
+/**
+ * How long a prepaid order may sit unpaid.
+ *
+ * Read from settings so the shop can change it without a deploy; the same row
+ * is what place_order stamps `payment_due_at` from, so the number shown at
+ * checkout is the number enforced.
+ */
+export const getPaymentWindowMinutes = cache(async (): Promise<number> => {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", "payment_window")
+    .maybeSingle();
+
+  const minutes = Number(
+    ((data as { value: Record<string, unknown> } | null)?.value ?? {}).minutes,
+  );
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 30;
+});

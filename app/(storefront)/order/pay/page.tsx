@@ -13,6 +13,8 @@ import { PaymentProofForm } from "@/components/checkout/payment-proof-form";
 import { CopyableNumber } from "@/components/checkout/copyable-number";
 import { Card, Badge } from "@/components/ui/primitives";
 import { formatTaka } from "@/lib/utils/money";
+import { sweepExpiredOrders } from "@/lib/actions/credit";
+import { PaymentCountdown } from "@/components/checkout/payment-countdown";
 
 export const metadata: Metadata = {
   title: "Complete your payment",
@@ -26,6 +28,8 @@ interface PayOrder {
   total_paisa: number;
   payment_method: string;
   payment_status: string;
+  payment_due_at: string | null;
+  advance_paisa: number;
   status: string;
 }
 
@@ -42,12 +46,17 @@ export default async function PayPage({
   searchParams: Promise<{ ref?: string }>;
 }) {
   const { ref } = await searchParams;
+
+  // Sweep lapsed orders before reading this one, so a customer arriving after
+  // the window sees the cancellation rather than a live-looking payment form.
+  // The daily cron is only a backstop: the free tier allows one run a day.
+  await sweepExpiredOrders();
   if (!ref) notFound();
 
   const admin = createAdminClient();
   const { data: order } = await admin
     .from("orders")
-    .select("id, order_number, total_paisa, payment_method, payment_status, status")
+    .select("id, order_number, total_paisa, advance_paisa, payment_method, payment_status, status, payment_due_at")
     .eq("order_number", ref.toUpperCase())
     .maybeSingle<PayOrder>();
 
@@ -126,6 +135,14 @@ export default async function PayPage({
           </p>
         </div>
       </div>
+
+      {/* Only while there is still something to do about it: a paid, submitted
+          or cancelled order has no window left to run down. */}
+      {order.payment_due_at && !alreadyPaid && !submitted && order.status === "placed" ? (
+        <div className="mt-4">
+          <PaymentCountdown dueAt={order.payment_due_at} />
+        </div>
+      ) : null}
 
       {alreadyPaid ? (
         <Card className="mt-6 border-success/25 bg-success-soft p-5">

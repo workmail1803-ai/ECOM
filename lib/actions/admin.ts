@@ -1041,3 +1041,89 @@ export async function deleteBundle(id: string): Promise<AdminState> {
   revalidatePath("/", "layout");
   return { ok: true, message: "Bundle removed." };
 }
+
+// ── Credit accounts ─────────────────────────────────────────────────────────
+
+/**
+ * Grant or update a customer's credit limit.
+ *
+ * Admin-only and not delegable: extending credit is deciding how much of the
+ * shop's money a customer may hold, which is not a section-level task.
+ *
+ * The phone is normalised in SQL by the same helper place_order uses, so an
+ * account granted to "+8801712345678" is found when the customer types
+ * "01712345678" at checkout.
+ */
+export async function saveCreditAccount(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requireAdmin();
+
+  const rawPhone = String(formData.get("phone") ?? "");
+  const holderName = String(formData.get("holder_name") ?? "").trim();
+  const limitTaka = Number(formData.get("limit_taka"));
+
+  if (!Number.isFinite(limitTaka) || limitTaka < 0) {
+    return { ok: false, error: "Enter a limit of zero or more." };
+  }
+
+  const db = createAdminClient();
+
+  const { data: normalised, error: phoneError } = await db.rpc("normalise_bd_phone", {
+    p_phone: rawPhone,
+  });
+  const phone = String(normalised ?? "");
+
+  if (phoneError || !/^01[3-9][0-9]{8}$/.test(phone)) {
+    return { ok: false, error: "Enter a valid Bangladeshi mobile number." };
+  }
+
+  const { error } = await db.from("credit_accounts").upsert(
+    {
+      phone,
+      holder_name: holderName || null,
+      // Taka in the form, paisa in the database — like every other amount.
+      limit_paisa: Math.round(limitTaka * 100),
+      is_active: formData.get("is_active") !== "off",
+      note: String(formData.get("note") ?? "").trim() || null,
+      approved_by: actor.id,
+    },
+    { onConflict: "phone" },
+  );
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/credit");
+  return { ok: true, message: `Credit account saved for ${phone}.` };
+}
+
+/** Record a repayment against an account. */
+export async function recordCreditRepayment(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  const actor = await requireAdmin();
+
+  const phone = String(formData.get("phone") ?? "");
+  const amountTaka = Number(formData.get("amount_taka"));
+
+  if (!Number.isFinite(amountTaka) || amountTaka <= 0) {
+    return { ok: false, error: "Enter an amount above zero." };
+  }
+
+  const db = createAdminClient();
+
+  // Positive delta: a repayment gives headroom back.
+  const { error } = await db.from("credit_account_ledger").insert({
+    phone,
+    delta_paisa: Math.round(amountTaka * 100),
+    reason: `Repayment recorded by staff`,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  void actor;
+  revalidatePath("/admin/credit");
+  return { ok: true, message: "Repayment recorded." };
+}
