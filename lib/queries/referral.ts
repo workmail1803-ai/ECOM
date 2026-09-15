@@ -74,3 +74,53 @@ export const getCreditBalance = cache(async (): Promise<number> => {
   const { data } = await supabase.rpc("credit_balance", { p_user: user.id });
   return Number(data ?? 0);
 });
+
+export interface PointsSummary {
+  balance: number;
+  paisaPerPoint: number;
+  minRedeemPoints: number;
+  enabled: boolean;
+  /** What the balance is worth, capped by nothing — display only. */
+  worthPaisa: number;
+  ledger: { id: string; delta_points: number; reason: string; created_at: string }[];
+}
+
+/**
+ * A customer's points standing.
+ *
+ * Read-only and for display. What a redemption is actually worth is decided by
+ * place_order against the same settings row, so a stale page cannot overspend.
+ */
+export const getPointsSummary = cache(async (): Promise<PointsSummary | null> => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const [balanceRes, ledgerRes, settingRes] = await Promise.all([
+    supabase.rpc("points_balance", { p_user: user.id }),
+    supabase
+      .from("points_ledger")
+      .select("id, delta_points, reason, created_at")
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase.from("settings").select("value").eq("key", "points_rules").maybeSingle(),
+  ]);
+
+  const cfg = ((settingRes.data as { value: Record<string, unknown> } | null)?.value ??
+    {}) as Record<string, unknown>;
+
+  const balance = Number(balanceRes.data ?? 0);
+  const paisaPerPoint = Number(cfg.paisa_per_point ?? 100);
+
+  return {
+    balance,
+    paisaPerPoint,
+    minRedeemPoints: Number(cfg.min_redeem_points ?? 0),
+    enabled: cfg.enabled === true,
+    worthPaisa: balance * paisaPerPoint,
+    ledger:
+      (ledgerRes.data as PointsSummary["ledger"] | null) ?? [],
+  };
+});

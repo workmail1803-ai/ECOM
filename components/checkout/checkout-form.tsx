@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import * as Icons from "lucide-react";
-import { Truck, Tag, ShieldCheck, Info, X, Layers, Wallet, Clock, type LucideIcon } from "lucide-react";
+import { Truck, Tag, ShieldCheck, Info, X, Layers, Wallet, Clock, Sparkles, type LucideIcon } from "lucide-react";
 import type { Address } from "@/types/database";
 import type { CartQuote } from "@/lib/pricing/types";
 import type { PaymentOption } from "@/lib/payments";
@@ -22,6 +22,7 @@ import {
 } from "@/components/checkout/delivery-options";
 import { applyCoupon } from "@/lib/actions/cart";
 import { CreditAccountOption } from "./credit-account";
+import { LocationPicker, type PickedLocation } from "./location-picker";
 
 const initial: CheckoutState = { ok: false };
 
@@ -50,6 +51,7 @@ export function CheckoutForm({
   advance,
   creditPaisa,
   paymentWindowMinutes,
+  points,
 }: {
   initialQuote: CartQuote;
   addresses: Address[];
@@ -66,6 +68,13 @@ export function CheckoutForm({
   advance: { enabled: boolean; percent: number; minPaisa: number };
   /** Minutes a prepaid order may sit unpaid before it is cancelled. */
   paymentWindowMinutes: number;
+  /** The customer's points standing. Null for guests. */
+  points: {
+    balance: number;
+    paisaPerPoint: number;
+    minRedeemPoints: number;
+    enabled: boolean;
+  } | null;
   /** Spendable store credit. Zero for guests and for anyone with none. */
   creditPaisa: number;
 }) {
@@ -101,7 +110,36 @@ export function CheckoutForm({
   const [method, setMethod] = useState<string>(paymentOptions[0]?.id ?? "cod");
   const [plan, setPlan] = useState<"full" | "partial">("full");
   const [useCredit, setUseCredit] = useState(creditPaisa > 0);
+  const [redeemPoints, setRedeemPoints] = useState(false);
   const [phone, setPhone] = useState(defaultPhone);
+
+  /*
+   * A picked pin, and the fields it filled. Held here rather than inside the
+   * picker so choosing a location can also set the delivery zone and the
+   * address inputs — and so the customer can then edit any of it.
+   */
+  const [picked, setPicked] = useState<PickedLocation | null>(null);
+  const [areaValue, setAreaValue] = useState("");
+  const [streetValue, setStreetValue] = useState("");
+
+  const applyLocation = (next: PickedLocation | null) => {
+    setPicked(next);
+    if (!next) return;
+
+    if (next.area) setAreaValue(next.area);
+    if (next.street) setStreetValue(next.street);
+
+    // A pin in Dhaka means Inside Dhaka; anywhere else is Outside, with the
+    // city filled in from the lookup. This is what removes the manual city
+    // choice — the customer only intervenes if the guess is wrong.
+    const city = (next.city || "").toLowerCase();
+    if (city.includes("dhaka")) {
+      setZoneSlug("inside-dhaka");
+    } else if (next.city) {
+      setZoneSlug("outside-dhaka");
+      setOutsideCity(next.city);
+    }
+  };
   const [couponCode, setCouponCode] = useState("");
   const [couponPending, startCoupon] = useTransition();
 
@@ -301,8 +339,8 @@ export function CheckoutForm({
                 id="area"
                 name="area"
                 required
-                defaultValue={saved?.area ?? ""}
-                key={`area-${addressId}`}
+                value={areaValue}
+                onChange={(e) => setAreaValue(e.target.value)}
                 placeholder="e.g. Dhanmondi"
                 invalid={Boolean(state.fieldErrors?.area)}
               />
@@ -319,8 +357,8 @@ export function CheckoutForm({
                 id="street"
                 name="street"
                 required
-                defaultValue={saved?.street ?? ""}
-                key={`street-${addressId}`}
+                value={streetValue}
+                onChange={(e) => setStreetValue(e.target.value)}
                 placeholder="House 12, Road 5, Block C"
                 invalid={Boolean(state.fieldErrors?.street)}
               />
@@ -469,6 +507,18 @@ export function CheckoutForm({
               decides what it is, instead of making the customer find
               their own in a list of 64. */}
           <input type="hidden" name="district" value={district} />
+
+          {/* The pin travels with the order. Bounded by the schema and by a
+              CHECK in the database, and ignored entirely when absent. */}
+          {picked ? (
+            <>
+              <input type="hidden" name="lat" value={picked.lat} />
+              <input type="hidden" name="lng" value={picked.lng} />
+              <input type="hidden" name="place_label" value={picked.label} />
+            </>
+          ) : null}
+
+          <LocationPicker value={picked} onChange={applyLocation} />
 
           {state.fieldErrors?.district ? (
             <p role="alert" className="mt-1.5 text-xs text-danger">
@@ -659,6 +709,37 @@ export function CheckoutForm({
               Online payment options appear here once bKash, Nagad or card
               credentials are configured.
             </p>
+          ) : null}
+
+          {/*
+            Points, spent as money. The taka figure here is what the balance is
+            worth at the configured rate — place_order recomputes it against
+            the ledger under a lock and caps it at what the order is actually
+            worth, so this can only ever be optimistic, never authoritative.
+          */}
+          {points &&
+          points.enabled &&
+          points.balance >= Math.max(1, points.minRedeemPoints) ? (
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-brand-600/20 bg-brand-50/50 p-3">
+              <input
+                type="checkbox"
+                name="redeem_points"
+                checked={redeemPoints}
+                onChange={(e) => setRedeemPoints(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-brand-600"
+              />
+              <span className="text-sm">
+                <span className="flex items-center gap-1.5 font-medium text-brand-700">
+                  <Sparkles size={14} />
+                  Use my {points.balance.toLocaleString()} points
+                </span>
+                <span className="mt-0.5 block text-xs text-ink-soft">
+                  Worth up to{" "}
+                  {formatTaka(points.balance * points.paisaPerPoint)} off this
+                  order.
+                </span>
+              </span>
+            </label>
           ) : null}
 
           <CreditAccountOption phone={phone} orderTotalPaisa={quote.total_paisa} />

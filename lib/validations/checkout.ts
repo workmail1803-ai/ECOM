@@ -61,6 +61,17 @@ export const checkoutSchema = z.object({
   partial_payment: z.enum(["on"]).optional(),
   /** "on" when the customer chose to spend their store credit. */
   use_credit: z.enum(["on"]).optional(),
+  /** "on" when the customer chose to put the order on their credit account. */
+  use_credit_account: z.enum(["on"]).optional(),
+  /** "on" when the customer chose to spend points on this order. */
+  redeem_points: z.enum(["on"]).optional(),
+  /*
+   * A picked map pin. Bounded here as well as by a CHECK in the database,
+   * because a value this far out is a bug or an attack, not a typo.
+   */
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  place_label: z.string().trim().max(300).optional().or(z.literal("")),
   save_address: z.coerce.boolean().optional().default(false),
 });
 

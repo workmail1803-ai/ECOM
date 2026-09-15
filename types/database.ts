@@ -121,6 +121,8 @@ export interface Product {
   compare_at_paisa: number | null;
   stock: number;
   low_stock_threshold: number;
+  /** Points a purchase of one unit earns, once the order is delivered. */
+  points_per_purchase: number;
   status: ProductStatus;
   is_featured: boolean;
   is_new_arrival: boolean;

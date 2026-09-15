@@ -213,6 +213,20 @@ export function ProductForm({
                 defaultValue={product?.low_stock_threshold ?? 5}
               />
             </Field>
+
+            <Field
+              label="Reward points"
+              htmlFor="points_per_purchase"
+              hint="Points a customer earns per unit, once the order is delivered"
+            >
+              <Input
+                id="points_per_purchase"
+                name="points_per_purchase"
+                type="number"
+                min="0"
+                defaultValue={product?.points_per_purchase ?? 0}
+              />
+            </Field>
           </div>
         </Card>
 

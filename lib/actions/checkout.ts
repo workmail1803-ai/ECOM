@@ -83,6 +83,13 @@ export async function placeOrder(
     // a figure it would like to pay.
     p_partial_payment: input.partial_payment === "on",
     p_use_credit: input.use_credit === "on",
+    p_use_credit_account: input.use_credit_account === "on",
+    p_redeem_points: input.redeem_points === "on",
+    // Null rather than undefined: the RPC needs the argument present so the
+    // one signature resolves, and null is what "no pin" means in the column.
+    p_lat: input.lat ?? null,
+    p_lng: input.lng ?? null,
+    p_place_label: input.place_label || null,
   });
 
   if (error) {
@@ -95,6 +102,9 @@ export async function placeOrder(
     total_paisa: number;
     advance_paisa: number;
     credit_applied_paisa: number;
+    credit_account_paisa: number;
+    points_redeemed_paisa: number;
+    points_spent: number;
     due_on_delivery_paisa: number;
     payment_method: string;
   };
