@@ -91,3 +91,61 @@ export async function reverseGeocode(
     return { ok: false, error: "Could not look up that location." };
   }
 }
+
+export interface PlaceSuggestion {
+  label: string;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * Find a place by name, so a customer can type instead of using GPS.
+ *
+ * Needed as a first-class path, not a fallback: geolocation can be refused,
+ * unavailable indoors, or simply not what the customer wants — they may be
+ * ordering to an office or to someone else's house. Typing "Dhanmondi 27"
+ * should get a pin without arguing with a map.
+ *
+ * Restricted to Bangladesh, because every result outside it is noise for this
+ * shop and a wrong pick sends a courier somewhere absurd.
+ */
+export async function searchPlaces(query: string): Promise<PlaceSuggestion[]> {
+  const q = query.trim();
+  // Two characters matches half the country; not worth a request.
+  if (q.length < 3) return [];
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("q", q);
+  url.searchParams.set("countrycodes", "bd");
+  url.searchParams.set("limit", "6");
+  url.searchParams.set("addressdetails", "1");
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "nazmul-commerce/1.0 (storefront address lookup)",
+        "Accept-Language": "en",
+      },
+      signal: AbortSignal.timeout(6000),
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return [];
+
+    const rows = (await res.json()) as {
+      display_name?: string;
+      lat?: string;
+      lon?: string;
+    }[];
+
+    return rows
+      .map((r) => ({
+        label: r.display_name ?? "",
+        lat: Number(r.lat),
+        lng: Number(r.lon),
+      }))
+      .filter((r) => r.label && Number.isFinite(r.lat) && Number.isFinite(r.lng));
+  } catch {
+    return [];
+  }
+}

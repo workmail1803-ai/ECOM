@@ -49,8 +49,18 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           {
+            /*
+             * `geolocation=()` disabled it for EVERYONE including us, so the
+             * checkout map's "Use my location" was blocked by the browser
+             * without ever prompting — it just returned PERMISSION_DENIED,
+             * which looked like the customer had refused.
+             *
+             * `(self)` allows our own origin and still blocks any third-party
+             * iframe. Camera and microphone stay fully off; nothing here needs
+             * them.
+             */
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
+            value: "camera=(), microphone=(), geolocation=(self)",
           },
         ],
       },

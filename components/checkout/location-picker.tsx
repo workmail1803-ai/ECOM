@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { MapPin, LocateFixed, Loader2, X } from "lucide-react";
-import { reverseGeocode } from "@/lib/actions/geocode";
+import { MapPin, LocateFixed, Loader2, X, Search } from "lucide-react";
+import {
+  reverseGeocode,
+  searchPlaces,
+  type PlaceSuggestion,
+} from "@/lib/actions/geocode";
 import { Button } from "@/components/ui/button";
 
 export interface PickedLocation {
@@ -42,9 +46,28 @@ export function LocationPicker({
   const [locating, setLocating] = useState(false);
   const [resolving, startResolve] = useTransition();
 
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PlaceSuggestion[] | null>(null);
+  const [searching, startSearch] = useTransition();
+
+  const runSearch = () => {
+    const q = query.trim();
+    if (q.length < 3) return;
+    startSearch(async () => {
+      const found = await searchPlaces(q);
+      setResults(found);
+      setStatus(
+        found.length === 0
+          ? "Nothing found for that. Try a nearby landmark, or drop the pin yourself."
+          : null,
+      );
+    });
+  };
+
   const holderRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const markerRef = useRef<import("leaflet").Marker | null>(null);
+  const resizeRef = useRef<ResizeObserver | null>(null);
 
   // Set the pin and ask what is there. Failure to geocode is not failure to
   // pick: the coordinates are kept either way.
@@ -111,13 +134,29 @@ export function LocationPicker({
       mapRef.current = map;
       markerRef.current = marker;
 
-      // The container is sized by CSS after the map is built, so Leaflet needs
-      // telling once the layout has settled or it renders one grey tile.
-      setTimeout(() => map.invalidateSize(), 60);
+      /*
+       * Leaflet caches the container size when the map is created and only
+       * loads tiles for THAT rectangle. The container here is sized by CSS
+       * after creation, so a single delayed invalidateSize() raced the layout
+       * and lost — which is why the map painted tiles in a narrow band and
+       * left the rest blank.
+       *
+       * A ResizeObserver removes the race entirely: every time the element's
+       * box actually changes, Leaflet is told, and it fills whatever size it
+       * now has.
+       */
+      const ro = new ResizeObserver(() => map.invalidateSize());
+      ro.observe(holderRef.current);
+      resizeRef.current = ro;
+
+      // One immediate pass for the common case where the box is already final.
+      requestAnimationFrame(() => map.invalidateSize());
     })();
 
     return () => {
       cancelled = true;
+      resizeRef.current?.disconnect();
+      resizeRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       markerRef.current = null;
@@ -188,6 +227,62 @@ export function LocationPicker({
           </span>
         ) : null}
       </div>
+
+      {/*
+        Typing is a first-class way in, not a fallback. Geolocation can be
+        refused or unavailable indoors, and plenty of orders go to an office or
+        to somebody else's house — where the customer's own position is the
+        wrong answer.
+      */}
+      <div className="mt-2 flex gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              // Inside a checkout form, Enter would otherwise submit the order.
+              e.preventDefault();
+              runSearch();
+            }
+          }}
+          placeholder="Type an address or landmark…"
+          aria-label="Search for your address"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-3 text-sm focus:border-brand-600 focus:outline-none"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          loading={searching}
+          disabled={query.trim().length < 3}
+          onClick={runSearch}
+        >
+          <Search size={14} />
+          Search
+        </Button>
+      </div>
+
+      {results && results.length > 0 ? (
+        <ul className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-line bg-surface">
+          {results.map((r) => (
+            <li key={`${r.lat},${r.lng}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(true);
+                  setResults(null);
+                  setQuery("");
+                  place(r.lat, r.lng);
+                }}
+                className="flex w-full items-start gap-2 px-3 py-2 text-left text-xs hover:bg-surface-sunken"
+              >
+                <MapPin size={13} className="mt-0.5 shrink-0 text-brand-600" />
+                <span className="text-ink-soft">{r.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       {status ? (
         <p
