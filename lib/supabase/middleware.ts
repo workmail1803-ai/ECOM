@@ -63,16 +63,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Staff check for /admin. One RPC, and only on admin routes, so the common
-  // storefront request does not pay for it.
-  if (user && isAdminRoute) {
-    const { data: isStaff } = await supabase.rpc("is_staff");
-    if (!isStaff) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/";
-      return NextResponse.redirect(url);
-    }
-  }
+  // No staff check here any more. It was one more database round trip on
+  // every admin click and every admin server action, made BEFORE the page
+  // could start its own queries — and it duplicated requireStaff() in the
+  // admin layout and requirePermission() in each page, which are the real
+  // gates and redirect non-staff to "/" themselves.
 
   return response;
 }

@@ -28,28 +28,54 @@ export interface SessionUser {
  *
  * Wrapped in React `cache` so a page that checks auth in the layout, the page
  * and two components still costs one round trip per request.
+ *
+ * Speed without giving up revocation. This used to be two network trips in a
+ * row — getUser() to the auth server, THEN the role/profile/permission reads
+ * — on every admin click and every server action. Now:
+ *
+ * 1. getClaims() verifies the token LOCALLY (this project signs with an
+ *    asymmetric ES256 key; the public key is fetched once per server instance
+ *    and cached). That yields the user id with no network trip, so the reads
+ *    below can start immediately.
+ * 2. getUser() still asks the auth server — alongside those reads, not before
+ *    them — and its answer decides. A token whose session was ended or whose
+ *    account was banned is refused at once, not when the token expires. That
+ *    matters because admin actions write with the service-role key: a local
+ *    signature check alone would have left a banned manager able to approve
+ *    payments for up to an hour.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const subject = claimsData?.claims?.sub;
+  if (!subject) return null;
 
   // my_role() is SECURITY DEFINER over user_roles, so a client cannot spoof it
   // the way it could a JWT claim.
-  const [{ data: role }, { data: profile }, perms] = await Promise.all([
+  const [
+    {
+      data: { user },
+    },
+    { data: role },
+    { data: profile },
+    perms,
+  ] = await Promise.all([
+    supabase.auth.getUser(),
     supabase.rpc("my_role"),
     supabase
       .from("profiles")
       .select(
         "id, full_name, phone, avatar_url, email, marketing_opt_in, created_at, updated_at",
       )
-      .eq("id", user.id)
+      .eq("id", subject)
       .maybeSingle(),
     supabase.rpc("my_permissions"),
   ]);
+
+  // The auth server is the authority. A revoked session, a banned account, or
+  // (paranoia) a different user than the token claimed: signed out.
+  if (!user || user.id !== subject) return null;
 
   const resolvedRole = (role as AppRole | null) ?? "customer";
 

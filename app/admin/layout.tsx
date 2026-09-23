@@ -14,12 +14,13 @@ export default async function AdminLayout({
   // The real gate. Middleware also redirects, but that is UX — this is the
   // check that decides whether admin data is fetched at all.
   const user = await requireStaff();
-  const settings = await getStoreSettings();
 
-  // Only worth counting for someone who can act on it.
-  const pendingPayments = can(user, "payments")
-    ? await countPendingManualPayments()
-    : 0;
+  // Independent reads, so in parallel. The pending count is only worth
+  // making for someone who can act on it.
+  const [settings, pendingPayments] = await Promise.all([
+    getStoreSettings(),
+    can(user, "payments") ? countPendingManualPayments() : Promise.resolve(0),
+  ]);
 
   return (
     <div className="flex min-h-dvh bg-surface-sunken">

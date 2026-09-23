@@ -86,6 +86,10 @@ SECTIONS = [
    "Opens the orders list already filtered to placed orders."),
   ("A-007", "Click 'Low stock' and 'Reviews to moderate' tiles.",
    "Each opens its own section. Counts on the tile match what the page lists."),
+  ("A-007a", "Click Products, then Orders, then Customers, then Dashboard in the left "
+   "navigation, one after another.",
+   "Each click responds at once with a grey loading outline, and the page fills in "
+   "shortly after (about a second or less on normal mobile data). No click feels frozen."),
   ("A-008", "Sign out from the admin panel.",
    "Returned to the storefront, signed out. Going back to /admin asks you to sign in again."),
  ],
@@ -148,6 +152,34 @@ SECTIONS = [
    "Deleted. It disappears from admin and the storefront filter."),
   ("BR-008", "Create a brand with the same slug as an existing one.",
    "Rejected with 'That slug is taken.'"),
+  ("BR-009", "Open New product. Under Brand press 'New brand', type 'Walton' and press Enter.",
+   "Walton is added and selected in the Brand list. The product itself is NOT saved yet "
+   "and nothing you typed in the form is lost."),
+  ("BR-010", "Finish the product and save it. Open Brands in a new tab.",
+   "The product is saved with brand Walton, and Walton is listed on the Brands page."),
+  ("BR-011", "In the product form press 'New brand' and type 'anker' (lowercase) for a "
+   "brand that already exists as 'Anker'.",
+   "Message: 'Anker already exists -- selected it.' No second Anker appears anywhere."),
+  ("BR-012", "Select a brand, press 'Rename <brand>', fix its spelling and press Save.",
+   "The new name shows in the list at once, on the Brands page, and on the storefront "
+   "product pages of that brand."),
+  ("BR-012a", "After renaming a brand, search the storefront for the NEW name.",
+   "Every product of that brand is found. Searching the old spelling no longer finds "
+   "them by brand."),
+  ("BR-013", "Rename a brand to the exact name of ANOTHER existing brand.",
+   "Refused: 'Another brand is already called ...'. Nothing changes."),
+  ("BR-014", "Add a brand whose name is typed only in Bangla letters (for example Walton "
+   "written in Bangla).",
+   "Added and selected without errors."),
+  ("BR-015", "Open the add box, then press Escape (or the X).",
+   "The box closes and the previously selected brand is still selected."),
+  ("BR-016", "Press 'New brand', type a name, and WITHOUT pressing Add click "
+   "'Create product'.",
+   "The product is not saved. The browser points at the brand box: 'Press Add to create "
+   "this brand, or cancel it, before saving the product.'"),
+  ("BR-017", "Fill a product, but give it a SKU that another product already uses, and save.",
+   "Refused with the duplicate-SKU message. Everything you typed -- and the brand you "
+   "chose -- is still in the form."),
  ],
 ),
 (

@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -51,13 +52,18 @@ function isServableImageHost(url: string): boolean {
   }
 }
 
+// Accents are dropped rather than turned into hyphens ("Numériques" was
+// becoming "nume-riques"), and the length is cut BEFORE the edge hyphens are
+// trimmed — cutting after could leave a trailing "-" that the slug CHECK
+// constraints reject.
 const slugify = (s: string) =>
   s
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .slice(0, 80)
+    .replace(/^-+|-+$/g, "");
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +360,12 @@ export async function saveCategory(
   };
 
   const db = createAdminClient();
+
+  // Needed to tell whether a save renamed the category (see below).
+  const { data: before } = id
+    ? await db.from("categories").select("name").eq("id", id).maybeSingle()
+    : { data: null };
+
   const { error } = id
     ? await db.from("categories").update(row).eq("id", id)
     : await db.from("categories").insert(row);
@@ -361,6 +373,10 @@ export async function saveCategory(
   if (error) {
     if (error.code === "23505") return { ok: false, error: "That slug is taken." };
     return { ok: false, error: error.message };
+  }
+
+  if (id && before && before.name !== row.name) {
+    await refreshProductSearch(db, "category_id", id);
   }
 
   revalidatePath("/admin/categories");
@@ -1231,7 +1247,27 @@ export async function saveBrand(
     return { ok: false, error: "Check the fields.", fieldErrors: zodErrors(parsed.error) };
   }
 
-  const slug = parsed.data.slug || slugify(parsed.data.name);
+  const id = String(formData.get("id") ?? "");
+  const name = cleanBrandName(parsed.data.name);
+  if (!brandKey(name)) {
+    return { ok: false, error: "Enter a brand name.", fieldErrors: { name: "Enter a brand name" } };
+  }
+
+  const db = createAdminClient();
+  const all = await loadBrands(db);
+
+  const twin = findBrandTwin(all, name, id);
+  if (twin) {
+    return {
+      ok: false,
+      error: `A brand called “${twin.name}” already exists.`,
+      fieldErrors: { name: "Already exists" },
+    };
+  }
+
+  // A typed slug is the operator's choice and is checked as given; an empty
+  // one is made from the name and made unique.
+  const slug = parsed.data.slug || freeBrandSlug(all, name, id);
   // The table enforces this shape with a CHECK; say so in words rather than
   // surfacing a constraint name.
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
@@ -1241,15 +1277,13 @@ export async function saveBrand(
     };
   }
 
-  const id = String(formData.get("id") ?? "");
   const row = {
-    name: parsed.data.name,
+    name,
     slug,
     logo_url: parsed.data.logo_url || null,
     is_active: formData.get("is_active") === "on",
   };
 
-  const db = createAdminClient();
   const { error } = id
     ? await db.from("brands").update(row).eq("id", id)
     : await db.from("brands").insert(row);
@@ -1259,9 +1293,182 @@ export async function saveBrand(
     return { ok: false, error: error.message };
   }
 
+  const previous = id ? all.find((b) => b.id === id) : null;
+  if (previous && previous.name !== name) {
+    await refreshProductSearch(db, "brand_id", id);
+  }
+
   revalidatePath("/admin/brands");
   revalidatePath("/", "layout");
   return { ok: true, message: id ? "Brand updated." : "Brand created." };
+}
+
+type BrandLite = { id: string; name: string; slug: string };
+type AdminDb = ReturnType<typeof createAdminClient>;
+
+/**
+ * The name as stored: Unicode-normalised (the same Bangla letter can arrive as
+ * one code point or as two, depending on the keyboard), invisible spaces
+ * removed, runs of whitespace collapsed.
+ */
+function cleanBrandName(raw: string): string {
+  return raw
+    .normalize("NFC")
+    .replace(/[\u200b\ufeff]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * What makes two brand names "the same maker": case, spacing, punctuation and
+ * joiners ignored, so "TP-Link", "tp link" and "TPLink" all match. Letters,
+ * combining marks (Bangla vowel signs) and digits are kept, so different
+ * Bangla words never collapse into one.
+ */
+function brandKey(name: string): string {
+  return name
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "");
+}
+
+const shortHash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 6);
+
+/**
+ * The whole brands table. It is a few dozen rows, and comparing in code is
+ * what makes the normalisation above possible — a PostgREST `ilike` could not
+ * see through different Unicode forms, and it treats `*` as a wildcard.
+ */
+async function loadBrands(db: AdminDb): Promise<BrandLite[]> {
+  const { data } = await db.from("brands").select("id, name, slug").limit(2000);
+  return (data ?? []) as BrandLite[];
+}
+
+function findBrandTwin(all: BrandLite[], name: string, exceptId = ""): BrandLite | null {
+  const key = brandKey(name);
+  return all.find((b) => b.id !== exceptId && brandKey(b.name) === key) ?? null;
+}
+
+/**
+ * A slug for a new or renamed brand that no OTHER brand holds.
+ *
+ * slugify keeps only a-z and 0-9, so a name written in Bangla gives nothing
+ * and "ওয়ালটন BD" and "মিনিস্টার BD" both give "bd". Those get a short hash of
+ * the name instead of — or after — the Latin part. The hash is deterministic,
+ * so two people adding the same name at once produce the same slug and the
+ * unique index lets exactly one of them through.
+ */
+function freeBrandSlug(all: BrandLite[], name: string, exceptId = ""): string {
+  const hash = shortHash(brandKey(name));
+  const base = slugify(name);
+  if (!base) return `brand-${hash}`;
+  const taken = all.some((b) => b.id !== exceptId && b.slug === base);
+  if (!taken) return base;
+  // Leave room for "-" + the 6-character hash inside the 80-character limit,
+  // so a long name never has its hash cut off back into the taken slug.
+  const room = base.slice(0, 73).replace(/-+$/, "");
+  return room ? `${room}-${hash}` : `brand-${hash}`;
+}
+
+/**
+ * Rebuild products.search_vector after a brand or category is renamed.
+ *
+ * The vector includes the brand and category NAMES, but its trigger fires on
+ * product updates only — renaming "Xiomi" to "Xiaomi" left search finding the
+ * old spelling and missing the new one. Setting the id column to itself fires
+ * `UPDATE OF brand_id` / `category_id` without changing anything else.
+ */
+async function refreshProductSearch(
+  db: AdminDb,
+  column: "brand_id" | "category_id",
+  id: string,
+): Promise<void> {
+  await db.from("products").update({ [column]: id }).eq(column, id);
+}
+
+export type QuickBrandResult =
+  | { ok: true; brand: BrandLite; existed: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Add or rename a brand without leaving the product form.
+ *
+ * The product form's brand list looked hardcoded to the people using it: the
+ * only way to a new maker was to abandon a half-filled product, find the
+ * Brands page, and come back. This is the same write as saveBrand, callable
+ * from a button inside the product form (which cannot nest a second <form>).
+ *
+ * Adding a name that already exists — "anker" when "Anker" is there — returns
+ * the existing brand rather than a near-duplicate, so the storefront filter
+ * does not end up listing the same maker twice.
+ */
+export async function quickSaveBrand(input: {
+  id?: string;
+  name: string;
+}): Promise<QuickBrandResult> {
+  await requirePermission("products");
+
+  const name = cleanBrandName(String(input.name ?? ""));
+  if (!brandKey(name)) return { ok: false, error: "Type the brand name." };
+  if (name.length > 80) return { ok: false, error: "Keep the name under 80 characters." };
+
+  const db = createAdminClient();
+  const id = input.id ? String(input.id) : "";
+  const all = await loadBrands(db);
+  const twin = findBrandTwin(all, name, id);
+
+  // ── Rename ────────────────────────────────────────────────────────────────
+  if (id) {
+    const current = all.find((b) => b.id === id);
+    if (!current) return { ok: false, error: "That brand no longer exists." };
+    if (twin) return { ok: false, error: `Another brand is already called “${twin.name}”.` };
+
+    // The slug is left alone on purpose: it is in shared filter links, and a
+    // spelling fix should not break them.
+    const { data, error } = await db
+      .from("brands")
+      .update({ name })
+      .eq("id", id)
+      .select("id, name, slug")
+      .single();
+    if (error || !data) return { ok: false, error: "Could not rename that brand." };
+
+    if (current.name !== name) await refreshProductSearch(db, "brand_id", id);
+
+    revalidatePath("/admin/brands");
+    revalidatePath("/", "layout");
+    return { ok: true, brand: data as BrandLite, existed: false };
+  }
+
+  // ── Add ───────────────────────────────────────────────────────────────────
+  if (twin) return { ok: true, brand: twin, existed: true };
+
+  const slug = freeBrandSlug(all, name);
+  const { data, error } = await db
+    .from("brands")
+    .insert({ name, slug, is_active: true })
+    .select("id, name, slug")
+    .single();
+
+  if (error) {
+    // Someone added the same brand a moment ago: the deterministic slug makes
+    // the unique index catch it, and this request simply gets that row.
+    if (error.code === "23505") {
+      const { data: raced } = await db
+        .from("brands")
+        .select("id, name, slug")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (raced && brandKey(raced.name) === brandKey(name)) {
+        return { ok: true, brand: raced as BrandLite, existed: true };
+      }
+    }
+    return { ok: false, error: "Could not add that brand. Try again." };
+  }
+
+  revalidatePath("/admin/brands");
+  revalidatePath("/", "layout");
+  return { ok: true, brand: data as BrandLite, existed: false };
 }
 
 export async function deleteBrand(id: string): Promise<AdminState> {

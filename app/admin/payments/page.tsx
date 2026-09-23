@@ -15,11 +15,12 @@ export default async function AdminPaymentsPage() {
   await requirePermission("payments");
   const db = createAdminClient();
 
-  const { data } = await db
-    .from("payments")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(150);
+  // The manual-payment queue does not depend on this list, so it is fetched
+  // alongside it rather than after it.
+  const [{ data }, manual] = await Promise.all([
+    db.from("payments").select("*").order("created_at", { ascending: false }).limit(150),
+    listManualPayments(),
+  ]);
 
   const payments = (data ?? []) as Payment[];
 
@@ -39,7 +40,6 @@ export default async function AdminPaymentsPage() {
   const live = enabledProviders();
   const manualEnabled = live.some((p) => isManualFlow(p.id));
 
-  const manual = await listManualPayments();
   const pendingManual = manual.filter(
     (m) => m.status === "pending" || m.status === "initiated",
   );

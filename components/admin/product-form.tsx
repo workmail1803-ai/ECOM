@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveProduct, type AdminState } from "@/lib/actions/admin";
@@ -10,6 +10,7 @@ import { Input, Textarea, Select, Field } from "@/components/ui/field";
 import { Card } from "@/components/ui/primitives";
 import type { Brand, Category, ProductAdmin, SpecItem } from "@/types/database";
 import { ImageUploader } from "./image-uploader";
+import { BrandPicker } from "./brand-picker";
 
 const initial: AdminState = { ok: false };
 
@@ -48,7 +49,24 @@ export function ProductForm({
     .join("\n");
 
   return (
-    <form action={action} className="grid gap-4 lg:grid-cols-[1fr_320px]">
+    <form
+      // Submitted by hand in onSubmit. React 19 resets a form after every
+      // action it runs — success OR failure — so a save refused for a
+      // duplicate SKU wiped everything typed since the page loaded, and left
+      // the controlled Brand list showing one brand while posting another.
+      // Because onSubmit calls preventDefault, React neither runs `action`
+      // again nor resets the form; `action` stays so a click before the page
+      // has hydrated still POSTs to the server instead of GETting every field
+      // (cost price included) into the URL. Browser validation still runs
+      // first: onSubmit only fires for a valid form.
+      action={action}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        startTransition(() => action(data));
+      }}
+      className="grid gap-4 lg:grid-cols-[1fr_320px]"
+    >
       {product ? <input type="hidden" name="id" value={product.id} /> : null}
 
       <div className="space-y-4">
@@ -108,14 +126,7 @@ export function ProductForm({
             </Field>
 
             <Field label="Brand" htmlFor="brand_id">
-              <Select id="brand_id" name="brand_id" defaultValue={product?.brand_id ?? ""}>
-                <option value="">No brand</option>
-                {brands.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </Select>
+              <BrandPicker brands={brands} defaultValue={product?.brand_id ?? ""} />
             </Field>
 
             <Field

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { Plus, Pencil, Trash2, Tag } from "lucide-react";
 import { saveBrand, deleteBrand, type AdminState } from "@/lib/actions/admin";
@@ -163,7 +163,18 @@ function BrandForm({
         {brand ? `Edit ${brand.name}` : "New brand"}
       </h2>
 
-      <form action={action} className="mt-4 space-y-4">
+      <form
+        action={action}
+        // As in the product form: without this, React 19's post-action reset
+        // put the OLD name back after "A brand called … already exists", so the
+        // message appeared to be about the name that was not the problem.
+        onSubmit={(e) => {
+          e.preventDefault();
+          const data = new FormData(e.currentTarget);
+          startTransition(() => action(data));
+        }}
+        className="mt-4 space-y-4"
+      >
         {brand ? <input type="hidden" name="id" value={brand.id} /> : null}
 
         <Field label="Name" htmlFor="brand-name" required error={state.fieldErrors?.name}>
