@@ -77,7 +77,7 @@ SECTIONS = [
   ("A-003", "Sign in as the admin account. Open /admin.",
    "Dashboard loads. KPI tiles appear first, then the chart and tables fill in."),
   ("A-004", "Look at the left navigation.",
-   "15 links: Products, Categories, Stock, Orders, Payments, Customers, Coupons, "
+   "16 links: Products, Categories, Brands, Stock, Orders, Payments, Customers, Coupons, "
    "Promotions, Banners, Reviews, Reports, Credit accounts, Staff, Design, Settings."),
   ("A-005", "Read each dashboard tile: today's sales, this month, gross margin, "
    "pending, delivered, customers, low stock, reviews to moderate.",
@@ -91,9 +91,11 @@ SECTIONS = [
  ],
 ),
 (
- "2. Categories -- adding, editing, ordering",
+ "2. Categories and brands -- adding, editing, ordering",
  "Categories drive the storefront navigation, the homepage tiles and the listing "
- "filters. Test these before products, because a product needs a category.",
+ "filters. Test these before products, because a product needs a category. Keep "
+ "one small JPG or PNG picture on the computer or phone you test with -- every "
+ "picture in admin is uploaded from the device; there are no link boxes.",
  [
   ("C-001", "Open Categories. Count the existing rows.",
    "All current categories listed, each showing how many products it holds."),
@@ -117,8 +119,35 @@ SECTIONS = [
    "Every active category appears, each with a tag icon, plus the red Sale row."),
   ("C-010", "Delete 'QA Test Category' while it has no products.",
    "Deleted. It disappears from admin and the storefront."),
-  ("C-011", "Assign a product to a category, then delete that category (section 3 first).",
-   "The product survives and becomes uncategorised. It does NOT vanish from the catalogue."),
+  ("C-011", "Assign a product to a category, then try to delete that category "
+   "(section 3 first).",
+   "Refused: the message says products still use it. Nothing is deleted. Move the "
+   "products to another category first, then the delete works."),
+  ("C-012", "Edit a category and press 'Upload picture'. Choose a photo from the device.",
+   "A spinner shows, then the picture appears in the form. Save: the picture shows on "
+   "the homepage category tile."),
+  ("C-013", "Edit that category again, remove the picture with the X, and save.",
+   "The tile falls back to its icon. No broken-image box anywhere."),
+  ("C-014", "Try to upload a PDF or a text file as a category picture.",
+   "Refused with 'use a JPG, PNG, WebP or AVIF picture'. Nothing is uploaded."),
+  ("BR-001", "Open Brands. Note the brands and their product counts.",
+   "Every brand listed, each with the number of products that use it."),
+  ("BR-002", "Click 'New brand'. Name it 'QA Brand', leave the slug empty, press "
+   "'Upload logo', choose a picture, and create it.",
+   "Created with slug qa-brand and the logo shown on its row."),
+  ("BR-003", "Open a product and pick 'QA Brand' in its brand list. Save. Open the "
+   "storefront listing and filter by brand.",
+   "QA Brand is offered as a filter and shows that product."),
+  ("BR-004", "Edit 'QA Brand': fix the spelling of its name and save.",
+   "The new name shows on the product page and in the storefront filter."),
+  ("BR-005", "Untick 'Show on the storefront' and save.",
+   "Row shows 'Hidden'. The brand leaves the storefront filter; its products are unaffected."),
+  ("BR-006", "Try to delete 'QA Brand' while a product uses it.",
+   "Refused: products still use it. Nothing is deleted."),
+  ("BR-007", "Move that product to another brand, then delete 'QA Brand'.",
+   "Deleted. It disappears from admin and the storefront filter."),
+  ("BR-008", "Create a brand with the same slug as an existing one.",
+   "Rejected with 'That slug is taken.'"),
  ],
 ),
 (
@@ -158,8 +187,21 @@ SECTIONS = [
    "and delivery note. Save. Open the storefront product page.",
    "Every field appears in its correct place: tabs for description and specifications, "
    "a ticked list for features."),
-  ("P-015", "Add a thumbnail URL and save.",
-   "Image appears on the product card, the listing and the product page."),
+  ("P-015", "In the Pictures box press 'Add pictures' and choose THREE photos at once "
+   "from the device. Save.",
+   "All three upload with a spinner, the first is marked 'Main'. After saving, the "
+   "main picture is on the product card, and all three are in the product page gallery."),
+  ("P-015a", "Use the arrows to move the third picture first (or press its star), then save.",
+   "That picture is now 'Main' and becomes the card picture on the storefront."),
+  ("P-015b", "Remove one picture with the X and save. Reopen the product.",
+   "Only the remaining pictures come back, in the order you left them."),
+  ("P-015c", "Remove EVERY picture from a product and save. Reopen it.",
+   "The Pictures box is empty and no old picture comes back on the storefront card."),
+  ("P-015d", "Upload a large phone photo (over 5 MB).",
+   "Accepted: it is shrunk on the device before upload. It still looks sharp on the "
+   "product page."),
+  ("P-015e", "Try to add a 9th picture.",
+   "The button is disabled at 8/8. Extra files chosen at once are skipped with a message."),
   ("P-016", "Set 'Reward points' to 50 and save. Open the storefront product page.",
    "'Earn 50 points with this item' appears near the price."),
   ("P-017", "Add that product to the cart and open the cart.",
@@ -375,9 +417,13 @@ SECTIONS = [
  "11. Banners and the homepage",
  "",
  [
-  ("B-001", "Open Banners. Create a hero banner with an image, title, subtitle, "
-   "Bangla eyebrow text, link and accent colour.",
-   "Created. It appears in the homepage hero card rail."),
+  ("B-001", "Open Banners. Create a hero banner: press 'Upload picture' and choose a tall "
+   "(portrait) photo, then add title, subtitle, Bangla eyebrow text, link and accent colour.",
+   "Created. It appears in the homepage hero card rail with the uploaded picture."),
+  ("B-001a", "Edit that banner, press 'Replace picture', choose a different photo and save.",
+   "The new picture shows on the homepage card; the old one is gone."),
+  ("B-001b", "While editing banner A, click edit on banner B.",
+   "The form switches to banner B's own title and pictures -- nothing carried over from A."),
   ("B-002", "Open the homepage on a PHONE-width screen.",
    "Exactly two hero cards fill the row. No sliver of a third is visible."),
   ("B-003", "Swipe the hero hard, as far as you can in one gesture.",
@@ -473,6 +519,19 @@ SECTIONS = [
  [
   ("G-001", "Open Design. Drag a colour picker.",
    "The live preview on the right updates instantly, without saving."),
+  ("G-001a", "Look at the 'Brand palette' card.",
+   "Eleven colours with their Bangla names and codes: Midnight navy #0B0F1A, Dark slate "
+   "#151B2B, Violet #6C5CE7, Neon cyan #00E5FF, Off-white #F2F4F8, Deep navy #0F172A, "
+   "Orange #FF6A00, Light grey #F3F4F6, Jet black #111111, Crimson red #FF2E4D, "
+   "Yellow #FFD400."),
+  ("G-001b", "Under 'Primary', tap the Violet swatch.",
+   "Primary becomes #6C5CE7, the swatch gets a ring, and the preview button turns violet."),
+  ("G-001c", "Under 'Primary', tap Neon cyan (or Yellow).",
+   "A yellow box warns that white button text on it will be hard to read, with the "
+   "ratio. Saving is still allowed."),
+  ("G-001d", "Set Primary to Violet and save. On the storefront, look at a selected "
+   "filter chip, the selected delivery option and a hovered button.",
+   "The light tints and hover shades are violet too -- no leftover blue anywhere."),
   ("G-002", "Change the primary colour and press Save. Open the storefront.",
    "Buttons, links and highlights use the new colour throughout."),
   ("G-003", "Change the heading font and save. Reload the storefront.",
@@ -494,7 +553,9 @@ SECTIONS = [
  "",
  [
   ("N-001", "Open Settings. Change the store name and save. Open the storefront.",
-   "The new name shows in the header, the page title and the footer."),
+   "The new name shows in the header, the page title, the footer, the homepage "
+   "'Buying from ...' and 'Best sellers' lines, and the About page. The developer "
+   "credit line is not the store name and does not change."),
   ("N-002", "Change the support phone, WhatsApp, email and hours.",
    "All appear on the storefront contact page and in the header strip."),
   ("N-003", "Change the warranty note.",

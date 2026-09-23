@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea, Select, Field } from "@/components/ui/field";
 import { Card } from "@/components/ui/primitives";
 import type { Brand, Category, ProductAdmin, SpecItem } from "@/types/database";
+import { ImageUploader } from "./image-uploader";
 
 const initial: AdminState = { ok: false };
 
@@ -24,10 +25,13 @@ export function ProductForm({
   product,
   categories,
   brands,
+  images = [],
 }: {
   product: ProductAdmin | null;
   categories: Category[];
   brands: Brand[];
+  /** Gallery URLs in display order, for an existing product. */
+  images?: string[];
 }) {
   const [state, action, pending] = useActionState(saveProduct, initial);
   const router = useRouter();
@@ -320,21 +324,24 @@ export function ProductForm({
         </Card>
 
         <Card className="p-5">
-          <h2 className="text-sm font-semibold text-ink">Media</h2>
+          <h2 className="text-sm font-semibold text-ink">Pictures</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
-            Paste an image URL, or upload to the product-images bucket in Supabase
-            Storage and paste the public URL.
+            Up to 8. Photos are resized before upload, so straight off a phone is
+            fine. The first one is the main picture on cards and in search.
           </p>
 
-          <Field label="Thumbnail URL" htmlFor="thumbnail_url" className="mt-3">
-            <Input
-              id="thumbnail_url"
-              name="thumbnail_url"
-              type="url"
-              defaultValue={product?.thumbnail_url ?? ""}
-              placeholder="https://…"
+          <div className="mt-3">
+            <ImageUploader
+              name="image_urls"
+              folder="products"
+              // Existing products keep their current pictures: the thumbnail
+              // first, then any gallery images that are not a repeat of it.
+              initial={[
+                ...(product?.thumbnail_url ? [product.thumbnail_url] : []),
+                ...(images ?? []).filter((u) => u !== product?.thumbnail_url),
+              ]}
             />
-          </Field>
+          </div>
 
           <Field label="Video embed URL" htmlFor="video_url" className="mt-3">
             <Input

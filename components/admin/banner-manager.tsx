@@ -10,6 +10,7 @@ import { saveBanner, deleteBanner, type AdminState } from "@/lib/actions/admin";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Field } from "@/components/ui/field";
 import { Card, Badge } from "@/components/ui/primitives";
+import { ImageUploader } from "./image-uploader";
 
 const initial: AdminState = { ok: false };
 
@@ -45,6 +46,10 @@ export function BannerManager({ banners }: { banners: Banner[] }) {
     <>
       {showForm ? (
         <BannerForm
+          // Remount per banner: the fields (and the picture) are uncontrolled
+          // defaults, so without a key, choosing another banner while the form
+          // is open kept showing the first one's values.
+          key={editing?.id ?? "new"}
           banner={editing}
           onDone={() => {
             setAdding(false);
@@ -213,23 +218,24 @@ function BannerForm({
             <Input id="subtitle" name="subtitle" defaultValue={banner?.subtitle ?? ""} />
           </Field>
 
-          <Field label="Desktop image URL" htmlFor="image_url">
-            <Input
-              id="image_url"
+          {/* One picture, not a desktop/mobile pair: the hero is the same tall
+              9:16 card at every screen width, so a second "mobile" picture
+              had nowhere to appear — the old field saved a URL nothing read. */}
+          <div className="sm:col-span-2">
+            <p className="mb-1.5 text-sm font-medium text-ink">Picture</p>
+            <ImageUploader
               name="image_url"
-              type="url"
-              defaultValue={banner?.image_url ?? ""}
+              bucket="banners"
+              folder="banners"
+              single
+              label="picture"
+              initial={banner?.image_url ? [banner.image_url] : []}
             />
-          </Field>
-
-          <Field label="Mobile image URL" htmlFor="mobile_image_url">
-            <Input
-              id="mobile_image_url"
-              name="mobile_image_url"
-              type="url"
-              defaultValue={banner?.mobile_image_url ?? ""}
-            />
-          </Field>
+            <p className="mt-1.5 text-[11px] text-ink-faint">
+              Tall (portrait) pictures fit best — hero cards are 9:16. Keep the
+              subject in the middle; the edges may be cropped.
+            </p>
+          </div>
 
           <Field label="Button label" htmlFor="cta_label">
             <Input id="cta_label" name="cta_label" defaultValue={banner?.cta_label ?? ""} />

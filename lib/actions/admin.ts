@@ -38,6 +38,19 @@ function zodErrors(error: z.ZodError): Record<string, string> {
   return out;
 }
 
+/** Hosts next.config.ts `images.remotePatterns` allows. Keep the two in step. */
+function isServableImageHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+      ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+      : null;
+    return host === supabaseHost || host === "images.unsplash.com";
+  } catch {
+    return false;
+  }
+}
+
 const slugify = (s: string) =>
   s
     .toLowerCase()
@@ -152,6 +165,19 @@ export async function saveProduct(
   const d = parsed.data;
   const id = String(formData.get("id") ?? "");
 
+  // Https only: these land in <img src> on the storefront, and a javascript:
+  // or http: URL has no business there. Capped at the uploader's limit.
+  //
+  // And only from a host next.config.ts lets next/image serve. Any other host
+  // saves fine and then renders as a broken picture on every product card,
+  // which is worse than refusing it here.
+  const imageUrls = formData
+    .getAll("image_urls")
+    .map((v) => String(v).trim())
+    .filter((u) => /^https:\/\/\S+$/i.test(u) && isServableImageHost(u))
+    .slice(0, 8);
+  const picturesOnForm = formData.has("image_urls__on");
+
   const compareAt = d.compare_at ? takaToPaisa(d.compare_at) : null;
   const price = takaToPaisa(d.price);
 
@@ -181,7 +207,11 @@ export async function saveProduct(
     description: d.description || null,
     warranty: d.warranty || null,
     delivery_note: d.delivery_note || null,
-    thumbnail_url: d.thumbnail_url || null,
+    // The uploader posts the pictures in display order; the first is the main
+    // one. With the uploader on the form, no pictures means none — removing
+    // the last one must clear the thumbnail, not quietly keep the old one.
+    // A tab opened before the uploader shipped still posts thumbnail_url.
+    thumbnail_url: picturesOnForm ? (imageUrls[0] ?? null) : (d.thumbnail_url || null),
     video_url: d.video_url || null,
     status: d.status,
     is_featured: d.is_featured,
@@ -205,20 +235,46 @@ export async function saveProduct(
   };
 
   const db = createAdminClient();
-  const { error } = id
-    ? await db.from("products").update(row).eq("id", id)
-    : await db.from("products").insert(row);
+  // `.select("id")` so a NEW product hands back the id its gallery rows need.
+  const { data: saved, error } = id
+    ? await db.from("products").update(row).eq("id", id).select("id").single()
+    : await db.from("products").insert(row).select("id").single();
 
-  if (error) {
-    if (error.code === "23505") {
+  if (error || !saved) {
+    if (error?.code === "23505") {
       return { ok: false, error: "That slug or SKU is already in use." };
     }
-    return { ok: false, error: error.message };
+    return { ok: false, error: error?.message ?? "Could not save the product." };
+  }
+
+  // Replace the gallery wholesale. Diffing old against new saves nothing worth
+  // having at eight rows, and "what you see in the form is what is stored"
+  // is easier to trust than a merge.
+  if (picturesOnForm) {
+    const productId = (saved as { id: string }).id;
+    await db.from("product_images").delete().eq("product_id", productId);
+
+    if (imageUrls.length > 0) {
+      const { error: imgError } = await db.from("product_images").insert(
+        imageUrls.map((url, position) => ({
+          product_id: productId,
+          url,
+          alt: d.name,
+          position,
+        })),
+      );
+      if (imgError) {
+        return {
+          ok: false,
+          error: `Product saved, but its pictures were not: ${imgError.message}`,
+        };
+      }
+    }
   }
 
   revalidatePath("/admin/products");
   revalidatePath("/products");
-  revalidatePath("/");
+  revalidatePath("/", "layout");
   return { ok: true, message: id ? "Product updated." : "Product created." };
 }
 
@@ -264,7 +320,13 @@ const categorySchema = z.object({
   slug: z.string().trim().max(80).optional().or(z.literal("")),
   description: z.string().trim().max(400).optional().or(z.literal("")),
   icon: z.string().trim().max(40).optional().or(z.literal("")),
-  image_url: z.string().trim().url().optional().or(z.literal("")),
+  image_url: z
+    .string()
+    .trim()
+    .url()
+    .refine(isServableImageHost, "Upload the picture here instead of linking it.")
+    .optional()
+    .or(z.literal("")),
   position: z.coerce.number().int().min(0).default(0),
 });
 
@@ -426,14 +488,21 @@ export async function saveBanner(
     return { ok: false, error: "Accent must be a hex colour like #1B4DFF." };
   }
 
+  // The hero renders through next/image, which throws for a host it has not
+  // been told about, so one pasted link from elsewhere would take the homepage
+  // down with it. The form only uploads now; this holds the line server-side.
+  const imageUrl = get("image_url");
+  if (imageUrl && !(/^https:\/\/\S+$/i.test(imageUrl) && isServableImageHost(imageUrl))) {
+    return { ok: false, error: "Upload the banner picture here rather than linking it." };
+  }
+
   const id = String(formData.get("id") ?? "");
   const row = {
     placement: get("placement") ?? "hero",
     title,
     subtitle: get("subtitle"),
     eyebrow: get("eyebrow"),
-    image_url: get("image_url"),
-    mobile_image_url: get("mobile_image_url"),
+    image_url: imageUrl,
     cta_label: get("cta_label"),
     cta_href: get("cta_href"),
     secondary_cta_label: get("secondary_cta_label"),
@@ -1128,4 +1197,96 @@ export async function recordCreditRepayment(
   void actor;
   revalidatePath("/admin/credit");
   return { ok: true, message: "Repayment recorded." };
+}
+
+// ── Brands ──────────────────────────────────────────────────────────────────
+
+const brandSchema = z.object({
+  name: z.string().trim().min(1, "Enter a brand name").max(80),
+  slug: z.string().trim().max(80).optional().or(z.literal("")),
+  logo_url: z
+    .string()
+    .trim()
+    .url()
+    .refine(isServableImageHost, "Upload the logo here instead of linking it.")
+    .optional()
+    .or(z.literal("")),
+});
+
+/**
+ * Create or rename a brand.
+ *
+ * Brands were only ever written by the seed script, so an operator had no way
+ * to add a new maker or fix a misspelling short of the Supabase dashboard.
+ * Gated on `products`: whoever may edit the catalogue may name its makers.
+ */
+export async function saveBrand(
+  _prev: AdminState,
+  formData: FormData,
+): Promise<AdminState> {
+  await requirePermission("products");
+  const parsed = brandSchema.safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return { ok: false, error: "Check the fields.", fieldErrors: zodErrors(parsed.error) };
+  }
+
+  const slug = parsed.data.slug || slugify(parsed.data.name);
+  // The table enforces this shape with a CHECK; say so in words rather than
+  // surfacing a constraint name.
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) {
+    return {
+      ok: false,
+      error: "The slug may use lowercase letters, numbers and single hyphens only.",
+    };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const row = {
+    name: parsed.data.name,
+    slug,
+    logo_url: parsed.data.logo_url || null,
+    is_active: formData.get("is_active") === "on",
+  };
+
+  const db = createAdminClient();
+  const { error } = id
+    ? await db.from("brands").update(row).eq("id", id)
+    : await db.from("brands").insert(row);
+
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "That slug is taken." };
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/brands");
+  revalidatePath("/", "layout");
+  return { ok: true, message: id ? "Brand updated." : "Brand created." };
+}
+
+export async function deleteBrand(id: string): Promise<AdminState> {
+  await requirePermission("products");
+  const db = createAdminClient();
+
+  // products.brand_id is ON DELETE SET NULL, so deleting would silently strip
+  // the maker off every product that carries it. Refuse, the same way
+  // categories do, and point at the non-destructive option.
+  const { count } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("brand_id", id);
+
+  if ((count ?? 0) > 0) {
+    return {
+      ok: false,
+      error: `${count} products still use this brand. Reassign them first, or deactivate the brand instead.`,
+    };
+  }
+
+  const { error } = await db.from("brands").delete().eq("id", id);
+  if (error) return { ok: false, error: "Could not delete that brand." };
+
+  revalidatePath("/admin/brands");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Brand deleted." };
 }

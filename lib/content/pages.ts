@@ -5,6 +5,10 @@
  * varies by store (phone number, return window, delivery fees) is interpolated
  * from `settings` / `delivery_zones` at render time — do not hardcode those
  * here.
+ *
+ * Write the shop's name as {{store}}. It is replaced with the name set in
+ * /admin/settings, so renaming the shop does not leave "About <old name>"
+ * behind on the About page.
  */
 
 export interface PageSection {
@@ -30,11 +34,11 @@ export interface ContentPage {
 export const CONTENT_PAGES: ContentPage[] = [
   {
     slug: "about",
-    title: "About Nazmul",
+    title: "About {{store}}",
     description:
       "Who we are, what we stock, and why we will not sell you a refurbished unit as new.",
     intro:
-      "Nazmul is a Dhaka-based retailer of consumer electronics and gadgets. We started because buying a power bank in this country involves too much guesswork — capacities that are not real, warranties nobody honours, and prices that change depending on how you ask.",
+      "{{store}} is a Dhaka-based retailer of consumer electronics and gadgets. We started because buying a power bank in this country involves too much guesswork — capacities that are not real, warranties nobody honours, and prices that change depending on how you ask.",
     sections: [
       {
         heading: "What we actually do",
@@ -466,7 +470,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     slug: "be-partner",
     title: "Be a partner",
     description:
-      "Retail, corporate supply and affiliate partnerships with Nazmul.",
+      "Retail, corporate supply and affiliate partnerships with {{store}}.",
     intro:
       "Partnership covers everything that is not a one-off retail sale: shops that want to stock us, companies that buy on a purchase order, and creators who send us customers.",
     sections: [
@@ -510,4 +514,15 @@ export const CONTENT_PAGES: ContentPage[] = [
 
 export function getContentPage(slug: string): ContentPage | undefined {
   return CONTENT_PAGES.find((p) => p.slug === slug);
+}
+
+/**
+ * The page with every {{store}} replaced by the shop's configured name.
+ * Round-trips through JSON so every string field — title, intro, paragraphs,
+ * FAQ answers — is covered without listing them, and the name is escaped as a
+ * JSON string so a quote in it cannot break the parse.
+ */
+export function withStoreName(page: ContentPage, storeName: string): ContentPage {
+  const escaped = JSON.stringify(storeName).slice(1, -1);
+  return JSON.parse(JSON.stringify(page).replaceAll("{{store}}", escaped));
 }

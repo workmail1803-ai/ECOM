@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SearchX } from "lucide-react";
 import { listProducts, getCategories, getBrands } from "@/lib/queries/catalog";
 import { parseProductQuery } from "@/lib/validations/catalog";
+import { getStoreSettings } from "@/lib/queries/settings";
 import { ProductGrid } from "@/components/storefront/sections";
 import { FilterPanel } from "@/components/product/filter-panel";
 import { SortSelect } from "@/components/product/sort-select";
@@ -10,10 +11,13 @@ import { LoadMoreProducts } from "@/components/product/load-more-products";
 import { EmptyState } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = {
-  title: "All products",
-  description: "Browse every gadget Nazmul stocks — filter by category, brand and price.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { store_name } = await getStoreSettings();
+  return {
+    title: "All products",
+    description: `Browse every gadget ${store_name} stocks — filter by category, brand and price.`,
+  };
+}
 
 export default async function ProductsPage({
   searchParams,

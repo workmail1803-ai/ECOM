@@ -5,11 +5,13 @@ import { getStoreSettings } from "@/lib/queries/settings";
 import { Card } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = {
-  title: "Contact us",
-  description:
-    "Call, WhatsApp, Messenger or email Nazmul — and where to find our counter in Dhaka.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { store_name } = await getStoreSettings();
+  return {
+    title: "Contact us",
+    description: `Call, WhatsApp, Messenger or email ${store_name} — and where to find our counter in Dhaka.`,
+  };
+}
 
 export default async function ContactPage() {
   const settings = await getStoreSettings();

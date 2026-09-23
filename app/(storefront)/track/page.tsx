@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { TrackForm } from "@/components/checkout/track-form";
+import { getStoreSettings } from "@/lib/queries/settings";
 
-export const metadata: Metadata = {
-  title: "Track your order",
-  description:
-    "Enter your order number and mobile number to see exactly where your Nazmul order is.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { store_name } = await getStoreSettings();
+  return {
+    title: "Track your order",
+    description: `Enter your order number and mobile number to see exactly where your ${store_name} order is.`,
+  };
+}
 
 export default async function TrackPage({
   searchParams,

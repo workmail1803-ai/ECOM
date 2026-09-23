@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, MessageCircle } from "lucide-react";
-import { CONTENT_PAGES, getContentPage } from "@/lib/content/pages";
+import { CONTENT_PAGES, getContentPage, withStoreName } from "@/lib/content/pages";
 import { getDeliveryZones, getStoreSettings } from "@/lib/queries/settings";
 import { Card } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -25,8 +25,9 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const page = getContentPage(slug);
-  if (!page) return { title: "Not found" };
+  const raw = getContentPage(slug);
+  if (!raw) return { title: "Not found" };
+  const page = withStoreName(raw, (await getStoreSettings()).store_name);
   return { title: page.title, description: page.description };
 }
 
@@ -36,13 +37,14 @@ export default async function ContentPageRoute({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const page = getContentPage(slug);
-  if (!page) notFound();
+  const raw = getContentPage(slug);
+  if (!raw) notFound();
 
   const [settings, zones] = await Promise.all([
     getStoreSettings(),
-    page.showDeliveryTable ? getDeliveryZones() : Promise.resolve([]),
+    raw.showDeliveryTable ? getDeliveryZones() : Promise.resolve([]),
   ]);
+  const page = withStoreName(raw, settings.store_name);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">

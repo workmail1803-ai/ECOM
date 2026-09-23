@@ -21,11 +21,14 @@ export default async function EditProductPage({
 
   // Service role, so `cost_paisa` comes back — it is revoked for both client
   // roles at the column level in migration 0011.
-  const [{ data: product }, { data: categories }, { data: brands }] =
+  const [{ data: product }, { data: categories }, { data: brands }, { data: gallery }] =
     await Promise.all([
       db.from("products").select("*").eq("id", id).maybeSingle(),
       db.from("categories").select("*").order("position"),
       db.from("brands").select("*").order("name"),
+      // Without these the form would open with only the main picture, and the
+      // next save would quietly delete the rest of the gallery.
+      db.from("product_images").select("url").eq("product_id", id).order("position"),
     ]);
 
   if (!product) notFound();
@@ -58,6 +61,7 @@ export default async function EditProductPage({
 
       <ProductForm
         product={p}
+        images={((gallery ?? []) as { url: string }[]).map((g) => g.url)}
         categories={(categories ?? []) as Category[]}
         brands={(brands ?? []) as Brand[]}
       />

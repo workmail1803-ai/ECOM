@@ -21,6 +21,7 @@ import {
   X,
   CreditCard,
   ShieldCheck,
+  Tag,
 } from "lucide-react";
 import type { AdminPermission } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils/cn";
@@ -52,6 +53,7 @@ const SECTIONS: {
     links: [
       { href: "/admin/products", label: "Products", icon: Package, permission: "products" },
       { href: "/admin/categories", label: "Categories", icon: FolderTree, permission: "categories" },
+      { href: "/admin/brands", label: "Brands", icon: Tag, permission: "products" },
       { href: "/admin/stock", label: "Stock", icon: Truck, permission: "stock" },
     ],
   },

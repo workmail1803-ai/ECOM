@@ -74,14 +74,14 @@ export default async function HomePage() {
       </Suspense>
 
       <Suspense fallback={<RailSkeleton title="Best sellers" />}>
-        <RailsBlock offerCards={banners.offerCards} />
+        <RailsBlock offerCards={banners.offerCards} storeName={settings.store_name} />
       </Suspense>
 
       <Suspense fallback={null}>
         <ReviewsBlock />
       </Suspense>
 
-      <Section title="Buying from Nazmul">
+      <Section title={`Buying from ${settings.store_name}`}>
         <WhyChooseUs />
       </Section>
 
@@ -168,8 +168,10 @@ async function FlashSaleBlock() {
  */
 async function RailsBlock({
   offerCards,
+  storeName,
 }: {
   offerCards: Awaited<ReturnType<typeof getBanners>>["offerCards"];
+  storeName: string;
 }) {
   const rails = await getRailProducts();
 
@@ -194,7 +196,7 @@ async function RailsBlock({
       {rails.bestSellers.length > 0 ? (
         <Section
           title="Best sellers"
-          subtitle="What Nazmul customers buy most."
+          subtitle={`What ${storeName} customers buy most.`}
           href="/products?sort=popular"
         >
           <ProductRail products={rails.bestSellers} />

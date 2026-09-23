@@ -62,18 +62,69 @@ export interface SiteTheme {
 export const DEFAULT_THEME: SiteTheme = {
   headingFont: "sora",
   bodyFont: "jakarta",
+  // These must equal the values in app/globals.css. The previous copy had
+  // drifted — hover, danger, success and warning were all slightly off — so
+  // "Reset to default" restored colours that had never actually been the
+  // design.
   colors: {
     brand600: "#1b4dff",
-    brand700: "#1540d6",
+    brand700: "#1739cc",
     ink: "#14161a",
     surface: "#ffffff",
     surfaceSunken: "#f7f7f5",
-    danger: "#e11d48",
-    success: "#0f9d58",
-    warning: "#c2820a",
+    danger: "#be123c",
+    success: "#0f766e",
+    warning: "#b45309",
   },
   radius: 0.75,
 };
+
+/**
+ * The client's brand palette, offered as one-click swatches on every colour
+ * field in /admin/design. Swatches, not a straitjacket: the free picker stays,
+ * because a palette of eleven cannot anticipate every combination.
+ *
+ * Names are the client's own, in Bangla. The last had no name supplied and is
+ * labelled plainly as yellow.
+ */
+export const BRAND_PALETTE: { hex: string; bn: string; en: string }[] = [
+  { hex: "#0b0f1a", bn: "মিডনাইট নেভি", en: "Midnight navy" },
+  { hex: "#151b2b", bn: "ডার্ক স্লেট", en: "Dark slate" },
+  { hex: "#6c5ce7", bn: "ভায়োলেট", en: "Violet" },
+  { hex: "#00e5ff", bn: "নিয়ন সায়ান", en: "Neon cyan" },
+  { hex: "#f2f4f8", bn: "অফ-হোয়াইট", en: "Off-white" },
+  { hex: "#0f172a", bn: "ডিপ নেভি", en: "Deep navy" },
+  { hex: "#ff6a00", bn: "অরেঞ্জ", en: "Orange" },
+  { hex: "#f3f4f6", bn: "লাইট গ্রে", en: "Light grey" },
+  { hex: "#111111", bn: "জেট ব্ল্যাক", en: "Jet black" },
+  { hex: "#ff2e4d", bn: "ক্রিমসন রেড", en: "Crimson red" },
+  { hex: "#ffd400", bn: "হলুদ", en: "Yellow" },
+];
+
+/** WCAG relative luminance of a #rrggbb colour. */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+/**
+ * WCAG contrast ratio between two #rrggbb colours, 1 to 21.
+ *
+ * Used by the design form to warn before a choice ships: buttons print WHITE
+ * text on the primary colour, so a neon cyan or yellow primary produces
+ * buttons nobody can read. 4.5 is the WCAG AA bar for body text, 3 for large
+ * text and interface components.
+ */
+export function contrastRatio(a: string, b: string): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -118,5 +169,69 @@ export function sanitiseTheme(raw: unknown): SiteTheme {
  */
 export function themeToCss(theme: SiteTheme): string {
   const c = theme.colors;
-  return `:root{--color-brand-600:${c.brand600};--color-brand-700:${c.brand700};--color-ink:${c.ink};--color-surface:${c.surface};--color-surface-sunken:${c.surfaceSunken};--color-danger:${c.danger};--color-success:${c.success};--color-warning:${c.warning};--radius-card:${theme.radius}rem;}`;
+  const d = DEFAULT_THEME.colors;
+  const mix = (a: string, pct: number, b: string) =>
+    `color-mix(in srgb, ${a} ${pct}%, ${b})`;
+
+  const vars: string[] = [
+    `--color-brand-600:${c.brand600}`,
+    `--color-brand-700:${c.brand700}`,
+    `--color-ink:${c.ink}`,
+    `--color-surface:${c.surface}`,
+    `--color-surface-sunken:${c.surfaceSunken}`,
+    `--color-danger:${c.danger}`,
+    `--color-success:${c.success}`,
+    `--color-warning:${c.warning}`,
+    `--radius-card:${theme.radius}rem`,
+  ];
+
+  /*
+   * Only the eight colours above are chosen; the rest of the system is tints
+   * and shades of them. Those used to stay hardcoded in globals.css, so picking
+   * a violet primary left `brand-50` — the selected-state background, used 25
+   * times — as the ORIGINAL blue: a violet border on a blue card.
+   *
+   * Each group is derived only when its source colour has actually changed, so
+   * an untouched store still renders exactly the hand-tuned values in
+   * globals.css rather than a close approximation of them.
+   */
+  if (c.brand600 !== d.brand600) {
+    vars.push(
+      `--color-brand-50:${mix(c.brand600, 8, c.surface)}`,
+      `--color-brand-100:${mix(c.brand600, 14, c.surface)}`,
+      `--color-brand-200:${mix(c.brand600, 26, c.surface)}`,
+      `--color-brand-300:${mix(c.brand600, 42, c.surface)}`,
+      `--color-brand-400:${mix(c.brand600, 62, c.surface)}`,
+      `--color-brand-500:${mix(c.brand600, 82, c.surface)}`,
+    );
+  }
+  if (c.brand700 !== d.brand700) {
+    vars.push(
+      `--color-brand-800:${mix(c.brand700, 82, "#000")}`,
+      `--color-brand-900:${mix(c.brand700, 64, "#000")}`,
+    );
+  }
+  // Text greys and hairlines are mixed from the text colour INTO the surface,
+  // not into white — which is what keeps them legible on a dark theme too.
+  if (c.ink !== d.ink || c.surface !== d.surface) {
+    vars.push(
+      `--color-ink-soft:${mix(c.ink, 80, c.surface)}`,
+      `--color-ink-muted:${mix(c.ink, 60, c.surface)}`,
+      `--color-ink-faint:${mix(c.ink, 42, c.surface)}`,
+      `--color-line:${mix(c.ink, 11, c.surface)}`,
+      `--color-line-strong:${mix(c.ink, 20, c.surface)}`,
+      `--color-surface-raised:${c.surface}`,
+    );
+  }
+  if (c.danger !== d.danger || c.surface !== d.surface) {
+    vars.push(`--color-danger-soft:${mix(c.danger, 10, c.surface)}`);
+  }
+  if (c.success !== d.success || c.surface !== d.surface) {
+    vars.push(`--color-success-soft:${mix(c.success, 10, c.surface)}`);
+  }
+  if (c.warning !== d.warning || c.surface !== d.surface) {
+    vars.push(`--color-warning-soft:${mix(c.warning, 12, c.surface)}`);
+  }
+
+  return `:root{${vars.join(";")};}`;
 }

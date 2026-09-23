@@ -1,12 +1,14 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, TriangleAlert } from "lucide-react";
 import { saveSiteTheme, resetSiteTheme, type AdminState } from "@/lib/actions/admin";
 import {
   COLOR_FIELDS,
   FONT_CHOICES,
   DEFAULT_THEME,
+  BRAND_PALETTE,
+  contrastRatio,
   type SiteTheme,
 } from "@/lib/theme/schema";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,34 @@ const initial: AdminState = { ok: false };
  * a round trip per nudge. Nothing is persisted until Save, and the server
  * re-validates everything regardless of what this form sends.
  */
-export function DesignForm({ theme }: { theme: SiteTheme }) {
+/**
+ * Pairs the storefront actually prints on top of each other. Buttons, the SALE
+ * badge and status pills are WHITE text on the colour; body copy is the text
+ * colour on the surfaces. 4.5 : 1 is the WCAG AA line for normal-size text.
+ */
+function readabilityProblems(c: SiteTheme["colors"]): string[] {
+  const checks: [string, string, string][] = [
+    ["White button text on Primary", "#ffffff", c.brand600],
+    ["White button text on Primary (hover)", "#ffffff", c.brand700],
+    ["White SALE badge text on Sale / danger", "#ffffff", c.danger],
+    ["Text on Surface", c.ink, c.surface],
+    ["Text on Page background", c.ink, c.surfaceSunken],
+    ["Success messages on Surface", c.success, c.surface],
+    ["Warning messages on Surface", c.warning, c.surface],
+  ];
+  return checks
+    .map(([what, fg, bg]) => [what, contrastRatio(fg, bg)] as const)
+    .filter(([, ratio]) => ratio < 4.5)
+    .map(([what, ratio]) => `${what} — ${ratio.toFixed(1)} : 1`);
+}
+
+export function DesignForm({
+  theme,
+  storeName,
+}: {
+  theme: SiteTheme;
+  storeName: string;
+}) {
   const [state, action, pending] = useActionState(saveSiteTheme, initial);
   const [draft, setDraft] = useState<SiteTheme>(theme);
   const [resetting, setResetting] = useState(false);
@@ -30,36 +59,111 @@ export function DesignForm({ theme }: { theme: SiteTheme }) {
   const setColor = (key: string, value: string) =>
     setDraft((d) => ({ ...d, colors: { ...d.colors, [key]: value } }));
 
+  const problems = readabilityProblems(draft.colors);
+
   return (
     <form action={action} className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <div className="space-y-4">
         <Card className="p-5">
-          <h2 className="text-sm font-semibold text-ink">Colours</h2>
+          <h2 className="text-sm font-semibold text-ink">Brand palette</h2>
           <p className="mt-0.5 text-xs text-ink-muted">
-            These drive every button, badge and panel on the storefront.
+            Tap a swatch under any colour below to use it there.
           </p>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {COLOR_FIELDS.map(({ key, label, hint }) => (
-              <label key={key} className="flex items-center gap-3">
-                <input
-                  type="color"
-                  name={`color__${key}`}
-                  value={draft.colors[key]}
-                  onChange={(e) => setColor(key, e.target.value)}
-                  className="size-10 shrink-0 cursor-pointer rounded-lg border border-line bg-surface p-1"
-                  aria-label={label}
+          <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+            {BRAND_PALETTE.map((p) => (
+              <li key={p.hex} className="flex items-center gap-2">
+                <span
+                  className="size-7 shrink-0 rounded-md border border-line"
+                  style={{ background: p.hex }}
                 />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-ink">{label}</span>
-                  <span className="block text-[11px] text-ink-faint">{hint}</span>
-                  <span className="block font-mono text-[11px] uppercase text-ink-muted">
-                    {draft.colors[key]}
+                <span className="min-w-0 leading-tight">
+                  <span lang="bn" className="block truncate text-xs font-medium text-ink">
+                    {p.bn}
+                  </span>
+                  <span className="block font-mono text-[10px] uppercase text-ink-muted">
+                    {p.hex}
                   </span>
                 </span>
-              </label>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-ink">Colours</h2>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            These drive every button, badge and panel on the storefront. Lighter
+            tints and hover shades are worked out from them automatically.
+          </p>
+
+          <div className="mt-4 grid gap-x-4 gap-y-5 sm:grid-cols-2">
+            {COLOR_FIELDS.map(({ key, label, hint }) => (
+              <div key={key}>
+                <label className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    name={`color__${key}`}
+                    value={draft.colors[key]}
+                    onChange={(e) => setColor(key, e.target.value)}
+                    className="size-10 shrink-0 cursor-pointer rounded-lg border border-line bg-surface p-1"
+                    aria-label={label}
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{label}</span>
+                    <span className="block text-[11px] text-ink-faint">{hint}</span>
+                    <span className="block font-mono text-[11px] uppercase text-ink-muted">
+                      {draft.colors[key]}
+                    </span>
+                  </span>
+                </label>
+
+                <div
+                  className="mt-2 flex flex-wrap gap-1.5"
+                  role="group"
+                  aria-label={`Palette colours for ${label}`}
+                >
+                  {BRAND_PALETTE.map((p) => {
+                    const on = draft.colors[key].toLowerCase() === p.hex;
+                    return (
+                      <button
+                        key={p.hex}
+                        type="button"
+                        onClick={() => setColor(key, p.hex)}
+                        title={`${p.bn} · ${p.en} · ${p.hex.toUpperCase()}`}
+                        aria-label={`${p.en} ${p.hex}`}
+                        aria-pressed={on}
+                        className={`size-5 rounded-full border border-line-strong transition-transform hover:scale-110 ${
+                          on ? "ring-2 ring-ink ring-offset-2 ring-offset-surface" : ""
+                        }`}
+                        style={{ background: p.hex }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
+
+          {problems.length > 0 ? (
+            <div
+              role="status"
+              className="mt-5 rounded-lg border border-warning/40 bg-warning-soft p-3 text-xs text-ink"
+            >
+              <p className="flex items-center gap-1.5 font-semibold">
+                <TriangleAlert size={14} className="text-warning" />
+                Some of these will be hard to read
+              </p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-ink-soft">
+                {problems.map((p) => (
+                  <li key={p}>{p}</li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-ink-muted">
+                Aim for 4.5 : 1 or more. You can still save — this is advice, not
+                a block.
+              </p>
+            </div>
+          ) : null}
         </Card>
 
         <Card className="p-5">
@@ -162,7 +266,7 @@ export function DesignForm({ theme }: { theme: SiteTheme }) {
         </div>
       </div>
 
-      <ThemePreview theme={draft} />
+      <ThemePreview theme={draft} storeName={storeName} />
     </form>
   );
 }
@@ -173,7 +277,7 @@ export function DesignForm({ theme }: { theme: SiteTheme }) {
  * The overrides are set on this element rather than on :root, so the preview
  * can show unsaved colours without recolouring the admin panel around it.
  */
-function ThemePreview({ theme }: { theme: SiteTheme }) {
+function ThemePreview({ theme, storeName }: { theme: SiteTheme; storeName: string }) {
   const c = theme.colors;
 
   return (
@@ -202,7 +306,7 @@ function ThemePreview({ theme }: { theme: SiteTheme }) {
           className="flex items-center justify-between px-4 py-3"
           style={{ background: c.surface, borderBottom: `1px solid ${c.surfaceSunken}` }}
         >
-          <span className="text-sm font-bold">Nazmul</span>
+          <span className="text-sm font-bold">{storeName}</span>
           <span
             className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
             style={{ background: c.danger }}

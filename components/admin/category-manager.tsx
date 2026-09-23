@@ -9,6 +9,7 @@ import { saveCategory, deleteCategory, type AdminState } from "@/lib/actions/adm
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Field } from "@/components/ui/field";
 import { Card, Badge } from "@/components/ui/primitives";
+import { ImageUploader } from "./image-uploader";
 
 const initial: AdminState = { ok: false };
 
@@ -43,6 +44,8 @@ export function CategoryManager({
     <>
       {showForm ? (
         <CategoryForm
+          // Remount per category so the defaults (and the picture) reset.
+          key={editing?.id ?? "new"}
           category={editing}
           onDone={() => {
             setAdding(false);
@@ -178,14 +181,21 @@ function CategoryForm({
             />
           </Field>
 
-          <Field label="Image URL" htmlFor="image_url" className="sm:col-span-2">
-            <Input
-              id="image_url"
+          <div className="sm:col-span-2">
+            <p className="mb-1.5 text-sm font-medium text-ink">Picture</p>
+            <ImageUploader
               name="image_url"
-              type="url"
-              defaultValue={category?.image_url ?? ""}
+              bucket="category-images"
+              folder="categories"
+              single
+              label="picture"
+              // category-images is capped at 2 MB (migration 0012), and a
+              // category tile is never shown large.
+              maxBytes={2 * 1024 * 1024}
+              maxEdge={1000}
+              initial={category?.image_url ? [category.image_url] : []}
             />
-          </Field>
+          </div>
 
           <Field label="Description" htmlFor="description" className="sm:col-span-2">
             <Textarea

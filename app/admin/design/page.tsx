@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth/session";
 import { getSiteTheme } from "@/lib/queries/theme";
+import { getStoreSettings } from "@/lib/queries/settings";
 import { DesignForm } from "@/components/admin/design-form";
 import { PageHeader } from "@/components/ui/primitives";
 
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function AdminDesignPage() {
   await requireAdmin();
-  const theme = await getSiteTheme();
+  const [theme, settings] = await Promise.all([getSiteTheme(), getStoreSettings()]);
 
   return (
     <>
@@ -19,7 +20,7 @@ export default async function AdminDesignPage() {
         title="Design"
         description="Colours, typeface and corner rounding for the whole storefront. Changes go live as soon as you save."
       />
-      <DesignForm theme={theme} />
+      <DesignForm theme={theme} storeName={settings.store_name} />
     </>
   );
 }
