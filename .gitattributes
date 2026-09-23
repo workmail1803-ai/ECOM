@@ -1,0 +1,12 @@
+# Never line-ending-convert binaries. With core.autocrlf on Windows, git
+# guessed the QA PDF was text and would have rewritten LF to CRLF inside its
+# compressed streams on checkout, leaving a file no reader can open.
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
