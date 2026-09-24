@@ -593,9 +593,15 @@ SECTIONS = [
   ("N-003", "Change the warranty note.",
    "Appears on every product page."),
   ("N-004", "Change the showroom address.",
-   "Appears at checkout when Office Pickup is chosen."),
-  ("N-005", "Check the three delivery options: Office Pickup, Inside Dhaka, Outside Dhaka.",
-   "All three listed with their charges and delivery times."),
+   "Appears in the storefront footer and on the Contact page."),
+  ("N-005", "Check the delivery options on a product page, in the cart and at checkout.",
+   "Exactly two: Inside Dhaka and Outside Dhaka, with their charges and delivery "
+   "times. Office Pickup is not offered anywhere. (It is listed in Settings as "
+   "switched off, so it can be turned back on if pickup ever returns.)"),
+  ("N-005a", "Open checkout with something in the cart and watch the Delivery line "
+   "in the order summary as the page loads.",
+   "It reads 'Calculating...' for a moment, then the real charge (Tk 50 for Inside "
+   "Dhaka). It never flashes 'Free'."),
   ("N-006", "Change the Inside Dhaka charge and save. Open a product page.",
    "The Shipping options panel shows the new amount, and so does the cart and checkout."),
   ("N-007", "Change the payment window (minutes) and open checkout with bKash.",

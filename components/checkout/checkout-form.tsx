@@ -176,6 +176,12 @@ export function CheckoutForm({
     });
   }, [district, method]);
 
+  // The page arrives with a quote made before any delivery option was known,
+  // so its delivery fee is 0. With Office Pickup gone, the default option is
+  // a paid one, and showing that 0 as "Free" (and a total without delivery)
+  // until the re-quote lands would flash a promise the order does not keep.
+  const awaitingDeliveryQuote = Boolean(district) && !quote.delivery_zone;
+
   const usingSaved = Boolean(addressId);
   const saved = addresses.find((a) => a.id === addressId) ?? null;
   const codBlocked =
@@ -880,6 +886,8 @@ export function CheckoutForm({
               <dd className="tabular font-medium text-ink">
                 {!district ? (
                   <span className="text-ink-faint">Select a district</span>
+                ) : awaitingDeliveryQuote ? (
+                  <span className="text-ink-faint">Calculating…</span>
                 ) : quote.delivery_fee_paisa === 0 ? (
                   <span className="text-success">Free</span>
                 ) : (
@@ -898,7 +906,11 @@ export function CheckoutForm({
             <div className="flex justify-between border-t border-line pt-3 text-base">
               <dt className="font-semibold text-ink">Total</dt>
               <dd className="tabular font-bold text-ink">
-                {formatTaka(quote.total_paisa)}
+                {awaitingDeliveryQuote ? (
+                  <span className="font-medium text-ink-faint">Calculating…</span>
+                ) : (
+                  formatTaka(quote.total_paisa)
+                )}
               </dd>
             </div>
           </dl>

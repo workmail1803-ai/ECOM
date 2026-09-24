@@ -1,17 +1,21 @@
 #!/usr/bin/env node
 /**
- * Collapse delivery to the three options the client asked for.
+ * Collapse delivery to the options the client asked for.
  *
  *   node scripts/set-delivery-options.mjs --dry
  *   node scripts/set-delivery-options.mjs
  *
  * The old model priced 64 districts across four zones, which meant the
  * shopper had to find their district in a dropdown before they could see a
- * delivery charge. The three options below need no lookup at all:
+ * delivery charge. The options below need no lookup at all:
  *
- *   Office Pickup   free      collected in person
  *   Inside Dhaka    tk 50     1-3 business days
  *   Outside Dhaka   tk 100    2-5 business days   (the fallback)
+ *
+ * Office Pickup was offered too, and the client has since withdrawn it. Its
+ * row is kept but switched OFF rather than deleted: two past orders point at
+ * it, and an admin can switch it back on from Settings if pickup returns —
+ * the checkout still knows how to present a pickup when the zone is active.
  *
  * `resolve_delivery_zone` already does exact-district-match first and falls
  * back otherwise, so making "Outside Dhaka" the fallback means anything that
@@ -81,7 +85,8 @@ const ZONES = [
     max_days: 1,
     districts: ["Office Pickup"],
     is_fallback: false,
-    is_active: true,
+    // Withdrawn by the client. Off, not deleted — see the note at the top.
+    is_active: false,
     position: 1,
   },
   {
